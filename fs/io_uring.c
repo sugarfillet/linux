@@ -266,7 +266,6 @@ static struct io_sq_data __percpu **percpu_sqd;
 struct io_comp_state {
 	unsigned int		nr;
 	struct list_head	list;
-	struct io_ring_ctx	*ctx;
 };
 
 struct io_submit_state {
@@ -1866,10 +1865,9 @@ static void io_req_complete_nostate(struct io_kiocb *req, long res,
 	io_put_req(req);
 }
 
-static void io_submit_flush_completions(struct io_comp_state *cs)
+static void io_submit_flush_completions(struct io_comp_state *cs,
+					struct io_ring_ctx *ctx)
 {
-	struct io_ring_ctx *ctx = cs->ctx;
-
 	spin_lock_irq(&ctx->completion_lock);
 	while (!list_empty(&cs->list)) {
 		struct io_kiocb *req;
@@ -6526,7 +6524,7 @@ again:
 		if (req->flags & REQ_F_COMPLETE_INLINE) {
 			list_add_tail(&req->compl.list, &cs->list);
 			if (++cs->nr >= 32)
-				io_submit_flush_completions(cs);
+				io_submit_flush_completions(cs, req->ctx);
 			req = NULL;
 		} else {
 			req = io_put_req_find_next(req);
@@ -6657,10 +6655,11 @@ static int io_submit_sqe(struct io_kiocb *req, const struct io_uring_sqe *sqe,
 /*
  * Batched submission is done, ensure local IO is flushed out.
  */
-static void io_submit_state_end(struct io_submit_state *state)
+static void io_submit_state_end(struct io_submit_state *state,
+				struct io_ring_ctx *ctx)
 {
 	if (!list_empty(&state->comp.list))
-		io_submit_flush_completions(&state->comp);
+		io_submit_flush_completions(&state->comp, ctx);
 	blk_finish_plug(&state->plug);
 	io_state_file_put(state);
 	if (state->free_reqs)
@@ -6671,12 +6670,11 @@ static void io_submit_state_end(struct io_submit_state *state)
  * Start submission side cache.
  */
 static void io_submit_state_start(struct io_submit_state *state,
-				  struct io_ring_ctx *ctx, unsigned int max_ios)
+				  unsigned int max_ios)
 {
 	blk_start_plug(&state->plug);
 	state->comp.nr = 0;
 	INIT_LIST_HEAD(&state->comp.list);
-	state->comp.ctx = ctx;
 	state->free_reqs = 0;
 	state->file = NULL;
 	state->ios_left = max_ios;
@@ -6843,7 +6841,7 @@ static int io_submit_sqes(struct io_ring_ctx *ctx, unsigned int nr)
 	percpu_counter_add(&current->io_uring->inflight, nr);
 	refcount_add(nr, &current->usage);
 
-	io_submit_state_start(&ctx->submit_state, ctx, nr);
+	io_submit_state_start(&ctx->submit_state, nr);
 
 	for (i = 0; i < nr; i++) {
 		const struct io_uring_sqe *sqe;
@@ -6891,7 +6889,7 @@ fail_req:
 	}
 	if (link)
 		io_queue_link_head(link, &ctx->submit_state.comp);
-	io_submit_state_end(&ctx->submit_state);
+	io_submit_state_end(&ctx->submit_state, ctx);
 
 	 /* Commit SQ ring head once we've consumed and submitted all SQEs */
 	io_commit_sqring(ctx);
