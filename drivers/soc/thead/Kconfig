@@ -1,0 +1,14 @@
+# SPDX-License-Identifier: GPL-2.0-only
+if SOC_THEAD || COMPILE_TEST
+
+menu "Thead SoC drivers"
+
+config LIGHT_IOPMP
+	tristate "Thead light iopmp support"
+	default y
+	help
+	  This driver supports Light IOPMP built-in for security system.
+
+endmenu
+
+endif
