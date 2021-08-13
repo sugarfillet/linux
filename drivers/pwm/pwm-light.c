@@ -1,0 +1,199 @@
+// SPDX-License-Identifier: GPL-2.0
+/*
+ * simple driver for PWM (Pulse Width Modulator) controller
+ *
+ */
+
+#include <linux/bitfield.h>
+#include <linux/bitops.h>
+#include <linux/clk.h>
+#include <linux/delay.h>
+#include <linux/err.h>
+#include <linux/io.h>
+#include <linux/kernel.h>
+#include <linux/module.h>
+#include <linux/of.h>
+#include <linux/of_device.h>
+#include <linux/platform_device.h>
+#include <linux/pwm.h>
+#include <linux/slab.h>
+
+#define MAX_PWM_NUM	6
+
+#define LIGHT_PWM_CHN_BASE(n)		((n) * 0x20)
+#define LIGHT_PWM_CTRL(n)		(LIGHT_PWM_CHN_BASE(n) + 0x00)
+#define LIGHT_PWM_RPT(n)		(LIGHT_PWM_CHN_BASE(n) + 0x04)
+#define LIGHT_PWM_PER(n)		(LIGHT_PWM_CHN_BASE(n) + 0x08)
+#define LIGHT_PWM_FP(n)			(LIGHT_PWM_CHN_BASE(n) + 0x0c)
+#define LIGHT_PWM_STATUS(n)		(LIGHT_PWM_CHN_BASE(n) + 0x10)
+
+/* bit definition PWM_CTRL */
+#define PWM_START			BIT(0)
+#define PWM_FPOUT			BIT(8)
+
+struct pwm_light_chip {
+	struct clk *pwm_clk;
+	void __iomem *mmio_base;
+	struct pwm_chip chip;
+};
+
+#define to_pwm_light_chip(chip)		container_of(chip, struct pwm_light_chip, chip)
+
+static int pwm_light_clk_prepare_enable(struct pwm_chip *chip)
+{
+	struct pwm_light_chip *plc = to_pwm_light_chip(chip);
+	int ret;
+
+	ret = clk_prepare_enable(plc->pwm_clk);
+	if (ret) {
+		clk_disable_unprepare(plc->pwm_clk);
+		return ret;
+	}
+
+	return 0;
+}
+
+static void pwm_light_clk_disable_unprepare(struct pwm_chip *chip)
+{
+	struct pwm_light_chip *plc = to_pwm_light_chip(chip);
+
+	clk_disable_unprepare(plc->pwm_clk);
+}
+
+static int pwm_light_enable(struct pwm_chip *chip, struct pwm_device *pwm)
+{
+	struct pwm_light_chip *plc = to_pwm_light_chip(chip);
+	u32 value;
+
+	value = readl(plc->mmio_base + LIGHT_PWM_CTRL(pwm->hwpwm));
+	value |= PWM_START;
+	writel(value, plc->mmio_base + LIGHT_PWM_CTRL(pwm->hwpwm));
+
+	return 0;
+}
+
+static void pwm_light_disable(struct pwm_chip *chip, struct pwm_device *pwm)
+{
+	struct pwm_light_chip *plc = to_pwm_light_chip(chip);
+	u32 value;
+
+	value = readl(plc->mmio_base + LIGHT_PWM_CTRL(pwm->hwpwm));
+	value &= ~PWM_START;
+	writel(value, plc->mmio_base + LIGHT_PWM_CTRL(pwm->hwpwm));
+}
+
+static int pwm_light_config(struct pwm_chip *chip, struct pwm_device *pwm, int duty_ns, int period_ns)
+{
+	struct pwm_light_chip *plc = to_pwm_light_chip(chip);
+	unsigned long rate = clk_get_rate(plc->pwm_clk);
+	u32 duty_cycle, period_cycle;
+
+	if (duty_ns > period_ns) {
+		dev_err(chip->dev, "invalid pwm configure\n");
+		return -EINVAL;
+	}
+
+	period_cycle = period_ns * rate;
+	do_div(period_cycle, NSEC_PER_SEC);
+	writel(period_cycle, plc->mmio_base + LIGHT_PWM_PER(pwm->hwpwm));
+
+	duty_cycle = duty_ns * rate;
+	do_div(duty_cycle, NSEC_PER_SEC);
+	writel(duty_cycle, plc->mmio_base + LIGHT_PWM_FP(pwm->hwpwm));
+
+	return 0;
+}
+
+static int pwm_light_set_polarity(struct pwm_chip *chip, struct pwm_device *pwm, enum pwm_polarity polarity)
+{
+	struct pwm_light_chip *plc = to_pwm_light_chip(chip);
+	u32 value = readl(plc->mmio_base + LIGHT_PWM_CTRL(pwm->hwpwm));
+
+	if (polarity == PWM_POLARITY_INVERSED)
+		/* Duty cycle defines LOW period of PWM */
+		value |= PWM_FPOUT;
+	else
+		/* Duty cycle defines HIGH period of PWM */
+		value &= ~PWM_FPOUT;
+
+	writel(value, plc->mmio_base + LIGHT_PWM_CTRL(pwm->hwpwm));
+
+	return 0;
+}
+
+static const struct pwm_ops pwm_light_ops = {
+	.enable = pwm_light_enable,
+	.disable = pwm_light_disable,
+	.config = pwm_light_config,
+	.set_polarity = pwm_light_set_polarity,
+	.owner = THIS_MODULE,
+};
+
+static int pwm_light_probe(struct platform_device *pdev)
+{
+	struct pwm_light_chip *plc;
+	struct resource *res;
+	int ret;
+
+	plc = devm_kzalloc(&pdev->dev, sizeof(*res), GFP_KERNEL);
+	if (!plc)
+		return -ENOMEM;
+
+	platform_set_drvdata(pdev, plc);
+
+	/* optional clock, default open */
+	plc->pwm_clk = devm_clk_get(&pdev->dev, "clkgen_pwm_clk");
+	if (IS_ERR(plc->pwm_clk))
+		plc->pwm_clk = NULL;
+
+	ret = pwm_light_clk_prepare_enable(&plc->chip);
+	if (ret) {
+		dev_err(&pdev->dev, "failed to enable pwm clock(%d)\n", ret);
+		return ret;
+	}
+
+	res = platform_get_resource(pdev, IORESOURCE_MEM, 0);
+	plc->mmio_base = devm_ioremap_resource(&pdev->dev, res);
+	if (IS_ERR(plc->mmio_base))
+		return PTR_ERR(plc->mmio_base);
+
+	plc->chip.ops = &pwm_light_ops;
+	plc->chip.dev = &pdev->dev;
+	plc->chip.npwm = MAX_PWM_NUM;
+
+	ret = pwmchip_add(&plc->chip);
+	if (ret)
+		return ret;
+
+	dev_info(&pdev->dev, "succeed to add a pwm chip\n");
+
+	return 0;
+}
+
+static int pwm_light_remove(struct platform_device *pdev)
+{
+	struct pwm_light_chip *plc = platform_get_drvdata(pdev);
+
+	pwm_light_clk_disable_unprepare(&plc->chip);
+
+	return pwmchip_remove(&plc->chip);
+}
+
+static const struct of_device_id pwm_light_dt_ids[] = {
+	{.compatible = "thead,pwm-light",},
+	{/* sentinel */}
+};
+
+static struct platform_driver pwm_light_driver = {
+	.driver = {
+		.name = "pwm-light",
+		.of_match_table = pwm_light_dt_ids,
+	},
+	.probe = pwm_light_probe,
+	.remove = pwm_light_remove,
+};
+module_platform_driver(pwm_light_driver);
+
+MODULE_AUTHOR("wei.liu <lw312886@linux.alibaba.com>");
+MODULE_DESCRIPTION("Thead light pwm driver");
+MODULE_LICENSE("GPL v2");
