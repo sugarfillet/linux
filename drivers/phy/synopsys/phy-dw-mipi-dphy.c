@@ -295,7 +295,7 @@ static int dw_dphy_config_testen(struct dw_dphy *dphy, u8 val)
 	return ret;
 }
 
-static int dw_dphy_read_testdout(struct dw_dphy *dphy, u8 *val)
+static int __maybe_unused dw_dphy_read_testdout(struct dw_dphy *dphy, u8 *val)
 {
 	int ret;
 	u32 phy_tst_ctrl1;
