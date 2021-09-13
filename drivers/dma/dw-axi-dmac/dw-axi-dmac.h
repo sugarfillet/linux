@@ -263,6 +263,11 @@ enum {
 #define CH_CFG_H_SRC_PER_POS		7
 #define CH_CFG_H_HS_SEL_DST_POS		4
 #define CH_CFG_H_HS_SEL_SRC_POS		3
+
+/* CH_CFG_TT_FC */
+#define CH_CFG_L_SRC_PER		4
+#define CH_CFG_L_DST_PER		11
+
 enum {
 	DWAXIDMAC_HS_SEL_HW		= 0,
 	DWAXIDMAC_HS_SEL_SW
