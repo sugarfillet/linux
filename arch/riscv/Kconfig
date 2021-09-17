@@ -373,12 +373,34 @@ config FPU
 config VECTOR
 	bool "VECTOR support"
 	default n
+
+choice VECTOR_VERSION
+	prompt "VECTOR version"
+	depends on VECTOR
+	default VECTOR_1_0
 	help
-	  Say N here if you want to disable all vector related procedure
+	  Choose different version of vector:
+		- vector 0.7
+		- vector 1.0
+		- vector 1.x (future)
+
+config VECTOR_1_0
+	bool "VECTOR 1.0 support"
+	help
+	  Say N here if you want to disable all vector 1.0 related procedure
 	  in the kernel.
 
 	  If you don't know what to do here, say Y.
 
+config VECTOR_0_7
+	bool "VECTOR 0.7 support"
+	help
+	  Say N here if you want to disable all vector 0.7 related procedure
+	  in the kernel.
+
+	  If you don't know what to do here, say Y.
+
+endchoice
 endmenu
 
 menu "Kernel features"
