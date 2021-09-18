@@ -46,8 +46,8 @@ static void light_i2s_set_div_sclk(struct light_i2s_priv *chip, u32 sample_rate,
 
 static inline void light_snd_txctrl(struct light_i2s_priv *chip, bool on)
 {
-        u32 dma_en;
-	u32 i2s_en;
+	u32 dma_en = 0;
+	u32 i2s_en = 0;
 
 	if (on) {
 		dma_en |= DMACR_TDMAE_EN;
@@ -57,14 +57,8 @@ static inline void light_snd_txctrl(struct light_i2s_priv *chip, bool on)
 		i2s_en &= ~IISEN_I2SEN;
 	}
 
-	regmap_update_bits(chip->regmap, I2S_DMACR,
-                  DMACR_TDMAE_MSK ,
-                  dma_en);
-	regmap_update_bits(chip->regmap, I2S_IISEN,
-                  IISEN_I2SEN_MSK ,
-                  i2s_en);
-
-	i2s_en = readl(chip->regs + I2S_IISEN);
+	writel(dma_en, chip->regs + I2S_DMACR);
+	writel(i2s_en, chip->regs + I2S_IISEN);
 }
 
 static inline void light_snd_rxctrl(struct light_i2s_priv *chip, bool on)
@@ -80,12 +74,8 @@ static inline void light_snd_rxctrl(struct light_i2s_priv *chip, bool on)
 		i2s_en &= ~IISEN_I2SEN;
 	}
 
-	regmap_update_bits(chip->regmap, I2S_DMACR,
-                  DMACR_RDMAE_MSK ,
-                  dma_en);
-	regmap_update_bits(chip->regmap, I2S_IISEN,
-                  IISEN_I2SEN_MSK ,
-                  i2s_en);
+        writel(dma_en, chip->regs + I2S_DMACR);
+        writel(i2s_en, chip->regs + I2S_IISEN);
 }
 
 static int light_i2s_dai_startup(struct snd_pcm_substream *substream,
@@ -99,8 +89,14 @@ static void light_i2s_dai_shutdown(struct snd_pcm_substream *substream,
 {
 	struct light_i2s_priv *i2s_private = snd_soc_dai_get_drvdata(dai);
 
+	if (substream->stream == SNDRV_PCM_STREAM_PLAYBACK)
+		light_snd_txctrl(i2s_private, 0);
+	else
+		light_snd_rxctrl(i2s_private, 0);
+
 	clk_disable_unprepare(i2s_private->clk);
 }
+
 /**
  * light_i2s_dai_trigger: start and stop the DMA transfer.
  *
@@ -127,10 +123,6 @@ static int light_i2s_dai_trigger(struct snd_pcm_substream *substream, int cmd,
 	case SNDRV_PCM_TRIGGER_STOP:
         case SNDRV_PCM_TRIGGER_SUSPEND:
         case SNDRV_PCM_TRIGGER_PAUSE_PUSH:
-		if (tx)
-			light_snd_txctrl(i2s_private, 0);
-		else
-			light_snd_rxctrl(i2s_private, 0);
                 break;
 
         default:
@@ -239,8 +231,6 @@ static int light_i2s_dai_hw_params(struct snd_pcm_substream *substream, struct s
         }
 
         writel(funcmode, i2s_private->regs + I2S_FUNCMODE);
-
-	funcmode = readl(i2s_private->regs + I2S_FUNCMODE);
 
 	light_i2s_set_div_sclk(i2s_private, rate, channels);
 
