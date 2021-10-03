@@ -9,6 +9,7 @@
 #include <linux/device.h>
 #include <linux/types.h>
 
+#define AON_RPC_MSG_MAGIC       (0xef)
 #define LIGHT_AON_RPC_VERSION	1
 #define LIGHT_AON_RPC_MSG_NUM	7
 
@@ -19,13 +20,22 @@ enum light_aon_rpc_svc {
 	LIGHT_AON_RPC_SVC_RETURN = 1,
 	LIGHT_AON_RPC_SVC_PM = 2,
 	LIGHT_AON_RPC_SVC_MISC = 3,
-    LIGHT_AON_RPC_SVC_AVFS = 4,
+	LIGHT_AON_RPC_SVC_AVFS = 4,
 };
 
 enum light_aon_misc_func {
 	LIGHT_AON_MISC_FUNC_UNKNOWN = 0,
 	LIGHT_AON_MISC_FUNC_SET_CONTROL = 1,
 	LIGHT_AON_MISC_FUNC_GET_CONTROL = 2,
+	LIGHT_AON_MISC_FUNC_WDG_START = 3,
+	LIGHT_AON_MISC_FUNC_WDG_STOP = 4,
+	LIGHT_AON_MISC_FUNC_WDG_PING = 5,
+	LIGHT_AON_MISC_FUNC_WDG_TIMEOUTSET = 6,
+	LIGHT_AON_MISC_FUNC_WDG_RESTART = 7,
+	LIGHT_AON_MISC_FUNC_WDG_GET_STATE = 8,
+	LIGHT_AON_MISC_FUNC_WDG_POWER_OFF = 9,
+	LIGHT_AON_MISC_FUNC_AON_WDT_ON  = 10,
+	LIGHT_AON_MISC_FUNC_AON_WDT_OFF = 11,
 };
 
 enum light_aon_pm_func {
@@ -33,14 +43,16 @@ enum light_aon_pm_func {
 	LIGHT_AON_PM_FUNC_SET_RESOURCE_REGULATOR = 1,
 	LIGHT_AON_PM_FUNC_GET_RESOURCE_REGULATOR = 2,
 	LIGHT_AON_PM_FUNC_SET_RESOURCE_POWER_MODE = 3,
+	LIGHT_AON_PM_FUNC_PWR_SET  = 4,
+	LIGHT_AON_PM_FUNC_PWR_GET  = 5,
 };
 
-struct light_aon_rpc_msg {
-	uint8_t ver;
-	uint8_t size;
-	uint8_t svc;
-	uint8_t func;
-};
+struct light_aon_rpc_msg_hdr {
+	uint8_t ver;                   ///< version of msg hdr
+	uint8_t size;                  ///< msg size ,uinit in bytes,the size includes rpc msg header self.
+	uint8_t svc;                   ///< rpc main service id
+	uint8_t func;                  ///< rpc sub func id of specific service, sent by caller
+} __packed __aligned(4);
 
 /*
  * Defines for SC PM Power Mode
