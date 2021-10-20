@@ -237,6 +237,56 @@ static int light_i2s_dai_hw_params(struct snd_pcm_substream *substream, struct s
 	return 0;
 }
 
+static int light_hdmi_dai_hw_params(struct snd_pcm_substream *substream, struct snd_pcm_hw_params *params, struct snd_soc_dai *dai)
+{
+	struct light_i2s_priv *i2s_private = snd_soc_dai_get_drvdata(dai);
+	bool tx = substream->stream == SNDRV_PCM_STREAM_PLAYBACK;
+	u32 val;
+	u32 len = 0;
+	u32 rate;
+	u32 funcmode;
+
+	u32 channels = params_channels(params);
+
+	rate = params_rate(params);
+
+	switch (params_format(params)) {
+		case SNDRV_PCM_FORMAT_S16_LE:
+			val |= I2S_DATA_WIDTH_16BIT;
+			len = 16;
+			break;
+		case SNDRV_PCM_FORMAT_S24_LE:
+			val |= I2S_DATA_WIDTH_24BIT;
+			len = 24;
+			break;
+		default:
+			pr_err("Unknown data format\n");
+			return -EINVAL;
+	}
+
+	val |= FSSTA_SCLK_SEL_64;
+
+	regmap_update_bits(i2s_private->regmap, I2S_FSSTA,
+			FSSTA_DATAWTH_Msk | FSSTA_SCLK_SEL_Msk,
+			val);
+	funcmode = readl(i2s_private->regs + I2S_FUNCMODE);
+	if (tx) {
+		funcmode |= FUNCMODE_TMODE_WEN;
+		funcmode &= ~FUNCMODE_TMODE;
+		funcmode |= FUNCMODE_TMODE;
+	} else {
+		funcmode |= FUNCMODE_RMODE_WEN;
+		funcmode &= ~FUNCMODE_RMODE;
+		funcmode |= FUNCMODE_RMODE;
+	}
+
+	writel(funcmode, i2s_private->regs + I2S_FUNCMODE);
+
+	light_i2s_set_div_sclk(i2s_private, rate, channels);
+
+	return 0;
+}
+
 static int light_i2s_dai_probe(struct snd_soc_dai *dai)
 {
 	struct light_i2s_priv *i2s = snd_soc_dai_get_drvdata(dai);
@@ -256,6 +306,14 @@ static const struct snd_soc_dai_ops light_i2s_dai_ops = {
 	.hw_params	= light_i2s_dai_hw_params,
 };
 
+static const struct snd_soc_dai_ops light_hdmi_dai_ops = {
+	.startup        = light_i2s_dai_startup,
+	.shutdown       = light_i2s_dai_shutdown,
+	.trigger        = light_i2s_dai_trigger,
+	.set_fmt        = light_i2s_set_fmt_dai,
+	.hw_params      = light_hdmi_dai_hw_params,
+};
+
 static struct snd_soc_dai_driver light_i2s_soc_dai[] = {
 	{
 		.probe = light_i2s_dai_probe,
@@ -273,6 +331,23 @@ static struct snd_soc_dai_driver light_i2s_soc_dai[] = {
 			.channels_max	= 2,
 		},
 		.ops = &light_i2s_dai_ops,
+	},
+	{
+		.probe = light_i2s_dai_probe,
+		.name			= "light-hdmi-dai",
+		.playback = {
+			.rates		= LIGHT_RATES,
+			.formats	= LIGHT_FMTS,
+			.channels_min	= 1,
+			.channels_max	= 2,
+		},
+		.capture = {
+			.rates		= LIGHT_RATES,
+			.formats	= LIGHT_FMTS,
+			.channels_min	= 1,
+			.channels_max	= 2,
+		},
+		.ops = &light_hdmi_dai_ops,
 	},
 };
 
