@@ -51,6 +51,9 @@ struct ili9881c {
 
 	struct regulator	*power;
 	struct gpio_desc	*reset;
+
+	struct gpio_desc        *lcd_en;
+	struct gpio_desc        *lcd_bias_en;
 };
 
 #define ILI9881C_SWITCH_PAGE_INSTR(_page)	\
@@ -708,6 +711,7 @@ static int ili9881c_prepare(struct drm_panel *panel)
 	gpiod_set_value(ctx->reset, 0);
 	msleep(20);
 
+	ctx->dsi->mode_flags |= MIPI_DSI_MODE_LPM;
 	for (i = 0; i < ctx->desc->init_length; i++) {
 		const struct ili9881c_instr *instr = &ctx->desc->init[i];
 
@@ -800,7 +804,7 @@ static const struct drm_display_mode k101_im2byl02_default_mode = {
 };
 
 static const struct drm_display_mode txd_dy800qwxpab_default_mode = {
-	.clock		= 72000,
+	.clock		= 74250,
 
 	.hdisplay	= 800,
 	.hsync_start	= 800 + 60,
@@ -814,6 +818,8 @@ static const struct drm_display_mode txd_dy800qwxpab_default_mode = {
 
 	.width_mm	= 107,
 	.height_mm	= 172,
+
+	.flags          = DRM_MODE_FLAG_NHSYNC | DRM_MODE_FLAG_NVSYNC,
 };
 
 static int ili9881c_get_modes(struct drm_panel *panel,
@@ -853,7 +859,6 @@ static const struct drm_panel_funcs ili9881c_funcs = {
 static int ili9881c_dsi_probe(struct mipi_dsi_device *dsi)
 {
 	struct ili9881c *ctx;
-	int ret;
 
 	ctx = devm_kzalloc(&dsi->dev, sizeof(*ctx), GFP_KERNEL);
 	if (!ctx)
@@ -877,13 +882,27 @@ static int ili9881c_dsi_probe(struct mipi_dsi_device *dsi)
 		return PTR_ERR(ctx->reset);
 	}
 
+	ctx->lcd_en = devm_gpiod_get(&dsi->dev, "lcd-en", GPIOD_OUT_HIGH);
+	if (IS_ERR(ctx->lcd_en)) {
+		dev_err(&dsi->dev, "Couldn't get our lcd-en GPIO\n");
+		return PTR_ERR(ctx->lcd_en);
+	}
+
+	ctx->lcd_bias_en = devm_gpiod_get(&dsi->dev, "lcd-bias-en", GPIOD_OUT_HIGH);
+	if (IS_ERR(ctx->lcd_bias_en)) {
+		dev_err(&dsi->dev, "Couldn't get our lcd-bias-en GPIO\n");
+		return PTR_ERR(ctx->lcd_bias_en);
+	}
+
+#if 0
 	ret = drm_panel_of_backlight(&ctx->panel);
 	if (ret)
 		return ret;
+#endif
 
 	drm_panel_add(&ctx->panel);
 
-	dsi->mode_flags = MIPI_DSI_MODE_VIDEO_SYNC_PULSE;
+	dsi->mode_flags = MIPI_DSI_MODE_VIDEO | MIPI_DSI_MODE_VIDEO_BURST;
 	dsi->format = MIPI_DSI_FMT_RGB888;
 	dsi->lanes = 4;
 
@@ -921,6 +940,7 @@ static const struct ili9881c_desc txd_dy800qwxpab_desc = {
 static const struct of_device_id ili9881c_of_match[] = {
 	{ .compatible = "bananapi,lhr050h41", .data = &lhr050h41_desc },
 	{ .compatible = "feixin,k101-im2byl02", .data = &k101_im2byl02_desc },
+	{ .compatible = "txd,dy800qwxpab", .data = &txd_dy800qwxpab_desc },
 	{ }
 };
 MODULE_DEVICE_TABLE(of, ili9881c_of_match);
