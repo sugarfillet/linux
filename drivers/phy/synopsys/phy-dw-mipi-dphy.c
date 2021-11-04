@@ -105,6 +105,8 @@
     #define HSFREQRANGE_OVR_EN				BIT(7)
     #define HSFREQRANGE_OVR				GENMASK( 6,  0)
     #define HSFREQRANGE					HSFREQRANGE_OVR
+#define TC_PG_LP_BIAS_LANE0				0x4a
+    #define PRG_ON_LANE0				BIT(6)
 #define TC_SR_FSM_OVR_CNTRL				0xa0
 #define TC_SR_DDL_LOOP_CONF				0xa3
 
@@ -123,6 +125,13 @@
 #define LOOP_DIV_MAX					625
 #define FIN_DIV_N_FREQ_MIN				2
 #define FIN_DIV_N_FREQ_MAX				4
+
+/* --------------------------------- VOSYS ------------------------------ */
+
+#define VOSYS_MIPIDSI0_SYSREG				0x74
+#define VOSYS_MIPIDSI1_SYSREG				0x78
+    #define MIPIDSI_HSFREQRANGE				GENMASK( 9,  3)
+    #define MIPIDSI_CFGCLKFREQRANGE			GENMASK(15, 10)
 
 struct dw_pll_range {
 	u32 data_rate;
@@ -144,6 +153,7 @@ struct dw_dphy {
 	struct device *dev;
 	struct dw_dphy_cfg cfg;
 	struct regmap *regmap;
+	struct regmap *vosys_regmap;
 	struct clk *refclk;		/* PLL reference clock  */
 	struct clk *cfgclk;		/* DPHY configure clock */
 	struct clk *pclk;		/* APB slave bus clock  */
@@ -370,8 +380,8 @@ static int dw_dphy_pll_config(struct dw_dphy *dphy, struct dw_dphy_cfg *cfg)
 		  FIELD_PREP(TSTPLLDIG, TSTPLLDIG_LOCK);
 	dw_dphy_phy_write(dphy, TC_PLL_GMP_CTRL_DIGITAL_TEST, data, 1);
 
-	data[0] = FIELD_PREP(PLL_VCO_CNTRL_OVR, cfg->vco_range)		|
-		  FIELD_PREP(PLL_VCO_CNTRL_OVR_EN, data_rate > 640 ? 1 : 0);
+	data[0] = FIELD_PREP(PLL_VCO_CNTRL_OVR, cfg->vco_range)	|
+		  FIELD_PREP(PLL_VCO_CNTRL_OVR_EN, 1);
 	dw_dphy_phy_write(dphy, TC_PLL_VCO_CTRL, data, 1);
 
 	if (data_rate > 1250)
@@ -525,7 +535,7 @@ static int dw_dphy_configure(struct phy *phy, union phy_configure_opts *opts)
 {
 	int ret;
 	u8 data[8];
-	u32 phy_if_cfg;
+	u32 phy_if_cfg, hsfreqrange, cfgclkfreqrange;
 	unsigned long cfgclk_freq;
 	struct dw_dphy_cfg cfg = { 0 };
 	struct dw_dphy *dphy = phy_get_drvdata(phy);
@@ -535,11 +545,22 @@ static int dw_dphy_configure(struct phy *phy, union phy_configure_opts *opts)
 	if (ret)
 		return ret;
 
-#if 0
-	data[0] = FIELD_PREP(HSFREQRANGE_OVR_EN, 1)		|
-		  FIELD_PREP(HSFREQRANGE_OVR, cfg.hsfreqrange);
-	dw_dphy_phy_write(dphy, TC_HS_FREQ_RANGE_OF_OPERATION, data, 1);
-#endif
+	/* configure hsfreqrange and cfgclkfreqrange */
+	hsfreqrange = FIELD_PREP(MIPIDSI_HSFREQRANGE, cfg.hsfreqrange);
+	ret = regmap_update_bits(dphy->vosys_regmap, VOSYS_MIPIDSI0_SYSREG,
+				 MIPIDSI_HSFREQRANGE, hsfreqrange);
+	if (ret) {
+		dev_err(dphy->dev, "config dsi0 hsfreqrange failed\n");
+		return ret;
+	}
+
+	hsfreqrange = FIELD_PREP(MIPIDSI_HSFREQRANGE, cfg.hsfreqrange);
+	ret = regmap_update_bits(dphy->vosys_regmap, VOSYS_MIPIDSI1_SYSREG,
+				 MIPIDSI_HSFREQRANGE, hsfreqrange);
+	if (ret) {
+		dev_err(dphy->dev, "config dsi1 hsfreqrange failed\n");
+		return ret;
+	}
 
 	/* TODO: config prg_on_lane0 */
 
@@ -551,17 +572,32 @@ static int dw_dphy_configure(struct phy *phy, union phy_configure_opts *opts)
 	cfgclk_freq = DIV_ROUND_UP_ULL(clk_get_rate(dphy->cfgclk), 1000);
 	if (cfgclk_freq < CFGCLK_FREQ_MIN || cfgclk_freq > CFGCLK_FREQ_MAX)
 		return -EINVAL;
-	data[0] = (cfgclk_freq / 1000 - 17) * 4;
-	dw_dphy_phy_write(dphy, TC_PLL_DELAY_LP_TX_START_LP11, data, 1);
+	cfgclkfreqrange = FIELD_PREP(MIPIDSI_CFGCLKFREQRANGE,
+				     (cfgclk_freq / 1000 - 17) * 4);
+	ret = regmap_update_bits(dphy->vosys_regmap, VOSYS_MIPIDSI0_SYSREG,
+				 MIPIDSI_CFGCLKFREQRANGE, cfgclkfreqrange);
+	if (ret) {
+		dev_err(dphy->dev, "config dsi0 cfgclkfreqrange failed\n");
+		return ret;
+	}
 
-	data[0] = cfg.hsfreqrange;
-	dw_dphy_phy_write(dphy, TC_PLL_FSM_CNTRL, data, 1);
+	ret = regmap_update_bits(dphy->vosys_regmap, VOSYS_MIPIDSI1_SYSREG,
+				 MIPIDSI_CFGCLKFREQRANGE, cfgclkfreqrange);
+	if (ret) {
+		dev_err(dphy->dev, "config dsi1 cfgclkfreqrange failed\n");
+		return ret;
+	}
+
 
 	/* TODO: disable slew rate calibration */
 	data[0] = 0x0;
 	dw_dphy_phy_write(dphy, TC_SR_DDL_LOOP_CONF, data, 1);
 	data[0] = 0x1;
 	dw_dphy_phy_write(dphy, TC_SR_FSM_OVR_CNTRL, data, 1);
+
+	/* configure prg_on_lane0 */
+	data[0] = FIELD_PREP(PRG_ON_LANE0, 1);
+	dw_dphy_phy_write(dphy, TC_PG_LP_BIAS_LANE0, data, 1);
 
 	dw_dphy_pll_config(dphy, &cfg);
 
@@ -605,6 +641,10 @@ static int dw_dphy_probe(struct platform_device *pdev)
 	dphy->regmap = syscon_regmap_lookup_by_phandle(np, "regmap");
 	if (IS_ERR(dphy->regmap))
 		return PTR_ERR(dphy->regmap);
+
+	dphy->vosys_regmap = syscon_regmap_lookup_by_phandle(np, "vosys-regmap");
+	if (IS_ERR(dphy->vosys_regmap))
+		return PTR_ERR(dphy->vosys_regmap);
 
 	dphy->refclk = devm_clk_get(dev, "refclk");
 	if (IS_ERR(dphy->refclk))
