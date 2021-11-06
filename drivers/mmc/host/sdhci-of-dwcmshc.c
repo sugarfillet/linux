@@ -387,7 +387,6 @@ static unsigned int dwcmshc_pltfm_get_ro(struct sdhci_host *host)
 {
 	struct sdhci_pltfm_host *pltfm_host = sdhci_priv(host);
 	struct dwcmshc_priv *priv = sdhci_pltfm_priv(pltfm_host);
-	unsigned long flags;
 	int is_readonly;
 
 	if (priv->wprtn_ignore)
