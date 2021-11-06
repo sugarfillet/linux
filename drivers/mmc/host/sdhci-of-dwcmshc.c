@@ -32,6 +32,7 @@ struct dwcmshc_priv {
 	bool is_emmc_card;
 	bool pull_up_en;
 	bool io_fixed_1v8;
+	bool wprtn_ignore;
 };
 
 #define DELAY_LANE 30
@@ -382,11 +383,27 @@ static void dwcmshc_set_uhs_signaling(struct sdhci_host *host,
 	}
 }
 
+static unsigned int dwcmshc_pltfm_get_ro(struct sdhci_host *host)
+{
+	struct sdhci_pltfm_host *pltfm_host = sdhci_priv(host);
+	struct dwcmshc_priv *priv = sdhci_pltfm_priv(pltfm_host);
+	unsigned long flags;
+	int is_readonly;
+
+	if (priv->wprtn_ignore)
+		return 0;
+	is_readonly = !(sdhci_readl(host, SDHCI_PRESENT_STATE)
+			& SDHCI_WRITE_PROTECT);
+
+	return is_readonly;
+}
+
 static const struct sdhci_ops sdhci_dwcmshc_ops = {
 	.set_clock		= sdhci_set_clock,
 	.set_bus_width		= sdhci_set_bus_width,
 	.set_uhs_signaling	= dwcmshc_set_uhs_signaling,
 	.get_max_clock		= sdhci_pltfm_clk_get_max_clock,
+	.get_ro			= dwcmshc_pltfm_get_ro,
 	.reset			= snps_sdhci_reset,
 	.adma_write_desc	= dwcmshc_adma_write_desc,
 	.voltage_switch		= snps_phy_1_8v_init,
@@ -444,6 +461,11 @@ static int dwcmshc_probe(struct platform_device *pdev)
 		priv->io_fixed_1v8 = true;
 	else
 		priv->io_fixed_1v8 = false;
+
+	if (device_property_present(&pdev->dev, "wprtn_ignore"))
+		priv->wprtn_ignore = true;
+	else
+		priv->wprtn_ignore = false;
 
 	pltfm_host->clk = devm_clk_get(&pdev->dev, "core");
 	if (IS_ERR(pltfm_host->clk)) {
