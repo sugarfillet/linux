@@ -19,8 +19,8 @@
 #define IOPMP_EIP120III	9
 #define IOPMP_ISP0	10
 #define IOPMP_ISP1	11
-#define IOPMP_DSP	12
-#define IOPMP_DW200	13
+#define IOPMP_DW200	12
+#define IOPMP_VIPRE	13
 #define IOPMP_VENC	14
 #define IOPMP_VDEC	15
 #define IOPMP_G2D	16
@@ -33,5 +33,7 @@
 #define IOPMP_GMAC2	23
 #define IOPMP_DMAC	24
 #define IOPMP_TEE_DMAC	25
+#define IOPMP_DSP0	26
+#define IOPMP_DSP1	27
 
 #endif /* __DT_THEAD_LIGHT_IOPMP_H__ */
