@@ -28,6 +28,11 @@ enum LIGHT_MPW_CPUFREQ_CLKS {
 };
 
 #define LIGHT_MPW_CPUFREQ_CLK_NUM	4
+#define LIGHT_CPUFREQ_THRE		1500000
+#define LIGHT_C910_BUS_CLK_SYNC		BIT(11)
+#define LIGHT_C910_BUS_CLK_RATIO_MASK	0x700
+#define LIGHT_C910_BUS_CLK_DIV_RATIO_2	0x100
+#define LIGHT_C910_BUS_CLK_DIV_RATIO_3	0x200
 
 static int num_clks;
 static struct clk_bulk_data clks[] = {
@@ -122,18 +127,18 @@ static int light_set_target(struct cpufreq_policy *policy, unsigned int index)
 
 	/* change AXI bus clock ratio to match: BUS_CLK = CPU_CCLK/ratio <= 750MHz */
 	val = readl(ap_sys_reg);
-	if (new_freq > 1500000) {
-		val &= ~0x7;
-		val |= 0x2;
+	if (new_freq > LIGHT_CPUFREQ_THRE) {
+		val &= ~LIGHT_C910_BUS_CLK_RATIO_MASK;
+		val |= LIGHT_C910_BUS_CLK_DIV_RATIO_3;
 	} else {
-		val &= ~0x7;
-		val |= 0x1;
+		val &= ~LIGHT_C910_BUS_CLK_RATIO_MASK;
+		val |= LIGHT_C910_BUS_CLK_DIV_RATIO_2;
 	}
 	writel(val, ap_sys_reg);
-	val &= ~BIT(3);
+	val &= ~LIGHT_C910_BUS_CLK_SYNC;
 	writel(val, ap_sys_reg);
 	udelay(1);
-	val |= BIT(3);
+	val |= LIGHT_C910_BUS_CLK_SYNC;
 	writel(val, ap_sys_reg);
 
 	return 0;
