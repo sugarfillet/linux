@@ -25,7 +25,7 @@
 #include <sound/initval.h>
 #include <sound/dmaengine_pcm.h>
 
-#define IIS_SRC_CLK  50000000
+#define IIS_SRC_CLK  294912000
 #define IIS_MCLK_SEL 256
 #define DIV_VALUE    2
 #define LIGHT_I2S_DMABUF_SIZE     (64 * 1024)
