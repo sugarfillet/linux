@@ -182,13 +182,15 @@ static int pwm_light_probe(struct platform_device *pdev)
 	/* optional clock, default open */
 	plc->pwm_pclk = devm_clk_get(&pdev->dev, "pclk");
 	if (IS_ERR(plc->pwm_pclk)) {
-		dev_err(&pdev->dev, "failed to get pwm pclk");
+		if (PTR_ERR(plc->pwm_pclk) != -EPROBE_DEFER)
+			dev_err(&pdev->dev, "failed to get pwm pclk");
 		return PTR_ERR(plc->pwm_pclk);
 	}
 
 	plc->pwm_cclk = devm_clk_get(&pdev->dev, "cclk");
 	if (IS_ERR(plc->pwm_cclk)) {
-		dev_err(&pdev->dev, "failed to get pwm cclk");
+		if (PTR_ERR(plc->pwm_cclk) != -EPROBE_DEFER)
+			dev_err(&pdev->dev, "failed to get pwm cclk");
 		return PTR_ERR(plc->pwm_cclk);
 	}
 
