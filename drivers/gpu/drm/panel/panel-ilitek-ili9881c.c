@@ -858,6 +858,7 @@ static const struct drm_panel_funcs ili9881c_funcs = {
 
 static int ili9881c_dsi_probe(struct mipi_dsi_device *dsi)
 {
+	int ret;
 	struct ili9881c *ctx;
 
 	ctx = devm_kzalloc(&dsi->dev, sizeof(*ctx), GFP_KERNEL);
@@ -894,11 +895,9 @@ static int ili9881c_dsi_probe(struct mipi_dsi_device *dsi)
 		return PTR_ERR(ctx->lcd_bias_en);
 	}
 
-#if 0
 	ret = drm_panel_of_backlight(&ctx->panel);
 	if (ret)
 		return ret;
-#endif
 
 	drm_panel_add(&ctx->panel);
 
