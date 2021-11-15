@@ -28,11 +28,23 @@
 #define LIGHT_PWM_STATUS(n)		(LIGHT_PWM_CHN_BASE(n) + 0x10)
 
 /* bit definition PWM_CTRL */
-#define PWM_START			BIT(0)
-#define PWM_FPOUT			BIT(8)
+#define PWM_START				BIT(0)
+#define PWM_SOFT_RST				BIT(1)
+#define PWM_CFG_UPDATE				BIT(2)
+#define PWM_INT_EN				BIT(3)
+#define PWM_ONE_SHOT_MODE			BIT(4)
+#define PWM_CONTINUOUS_MODE			BIT(5)
+#define PWM_EVT_RISING_TRIG_UNDER_ONE_SHOT	BIT(6)
+#define PWM_EVT_FALLING_TRIG_UNDER_ONE_SHOT	BIT(7)
+#define PWM_FPOUT				BIT(8)
+#define PWM_INFACTOUT				BIT(9)
+
+
+
 
 struct pwm_light_chip {
-	struct clk *pwm_clk;
+	struct clk *pwm_pclk;
+	struct clk *pwm_cclk;
 	void __iomem *mmio_base;
 	struct pwm_chip chip;
 };
@@ -44,9 +56,15 @@ static int pwm_light_clk_prepare_enable(struct pwm_chip *chip)
 	struct pwm_light_chip *plc = to_pwm_light_chip(chip);
 	int ret;
 
-	ret = clk_prepare_enable(plc->pwm_clk);
+	ret = clk_prepare_enable(plc->pwm_pclk);
 	if (ret) {
-		clk_disable_unprepare(plc->pwm_clk);
+		clk_disable_unprepare(plc->pwm_pclk);
+		return ret;
+	}
+
+	ret = clk_prepare_enable(plc->pwm_cclk);
+	if (ret) {
+		clk_disable_unprepare(plc->pwm_cclk);
 		return ret;
 	}
 
@@ -57,7 +75,8 @@ static void pwm_light_clk_disable_unprepare(struct pwm_chip *chip)
 {
 	struct pwm_light_chip *plc = to_pwm_light_chip(chip);
 
-	clk_disable_unprepare(plc->pwm_clk);
+	clk_disable_unprepare(plc->pwm_pclk);
+	clk_disable_unprepare(plc->pwm_cclk);
 }
 
 static int pwm_light_enable(struct pwm_chip *chip, struct pwm_device *pwm)
@@ -85,21 +104,40 @@ static void pwm_light_disable(struct pwm_chip *chip, struct pwm_device *pwm)
 static int pwm_light_config(struct pwm_chip *chip, struct pwm_device *pwm, int duty_ns, int period_ns)
 {
 	struct pwm_light_chip *plc = to_pwm_light_chip(chip);
-	unsigned long rate = clk_get_rate(plc->pwm_clk);
-	u32 duty_cycle, period_cycle;
+	unsigned long rate = clk_get_rate(plc->pwm_cclk);
+	unsigned long duty_cycle, period_cycle;
+	u32 pwm_cfg = PWM_INFACTOUT | PWM_FPOUT | PWM_CONTINUOUS_MODE | PWM_INT_EN;
 
 	if (duty_ns > period_ns) {
 		dev_err(chip->dev, "invalid pwm configure\n");
 		return -EINVAL;
 	}
 
+
+	writel(pwm_cfg, plc->mmio_base + LIGHT_PWM_CTRL(pwm->hwpwm));	//0x328
+
 	period_cycle = period_ns * rate;
+
+	pr_debug("[%s,%d]pwm cclock = %ldHZ, period_ns = %d, period_cycle = %ld, pwm id = %d\n", __func__, __LINE__,
+			rate, period_ns, period_cycle, pwm->hwpwm);
+
 	do_div(period_cycle, NSEC_PER_SEC);
+
+	pr_debug("[%s,%d]pwm cclock = %ldHZ, period_ns = %d, period_cycle = %ld, pwm_id = %d\n", __func__, __LINE__,
+			rate, period_ns, period_cycle, pwm->hwpwm);
+
 	writel(period_cycle, plc->mmio_base + LIGHT_PWM_PER(pwm->hwpwm));
 
 	duty_cycle = duty_ns * rate;
 	do_div(duty_cycle, NSEC_PER_SEC);
+
+	pr_debug("[%s, %d]duty_cycle = %ld\n", __func__, __LINE__, duty_cycle);
+
 	writel(duty_cycle, plc->mmio_base + LIGHT_PWM_FP(pwm->hwpwm));
+
+
+	pwm_cfg = readl(plc->mmio_base + LIGHT_PWM_CTRL(pwm->hwpwm));
+	writel(pwm_cfg | PWM_CFG_UPDATE, plc->mmio_base + LIGHT_PWM_CTRL(pwm->hwpwm));	//0x32c
 
 	return 0;
 }
@@ -142,9 +180,17 @@ static int pwm_light_probe(struct platform_device *pdev)
 	platform_set_drvdata(pdev, plc);
 
 	/* optional clock, default open */
-	plc->pwm_clk = devm_clk_get(&pdev->dev, "clkgen_pwm_clk");
-	if (IS_ERR(plc->pwm_clk))
-		plc->pwm_clk = NULL;
+	plc->pwm_pclk = devm_clk_get(&pdev->dev, "pclk");
+	if (IS_ERR(plc->pwm_pclk)) {
+		dev_err(&pdev->dev, "failed to get pwm pclk");
+		return PTR_ERR(plc->pwm_pclk);
+	}
+
+	plc->pwm_cclk = devm_clk_get(&pdev->dev, "cclk");
+	if (IS_ERR(plc->pwm_cclk)) {
+		dev_err(&pdev->dev, "failed to get pwm cclk");
+		return PTR_ERR(plc->pwm_cclk);
+	}
 
 	ret = pwm_light_clk_prepare_enable(&plc->chip);
 	if (ret) {
