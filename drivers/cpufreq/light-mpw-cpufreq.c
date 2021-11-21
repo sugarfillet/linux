@@ -47,6 +47,7 @@ static struct cpufreq_frequency_table *freq_table;
 static unsigned int max_freq;
 static unsigned int transition_latency;
 static void __iomem *ap_sys_reg;
+static bool light_dvfs_sv = false;
 
 static u32 *light_dvddm_volt;
 static u32 soc_opp_count = 0;
@@ -79,7 +80,7 @@ static int light_set_target(struct cpufreq_policy *policy, unsigned int index)
 		new_freq / 1000, volt / 1000);
 
 	/* scaling up?  scale voltage before frequency */
-	if (new_freq > old_freq) {
+	if (new_freq > old_freq && !light_dvfs_sv) {
 		ret = regulator_set_voltage_tol(dvddm_cpu_reg, light_dvddm_volt[index], 0);
 		if (ret) {
 			dev_err(cpu_dev, "failed to scale vddsoc up: %d\n", ret);
@@ -116,7 +117,7 @@ static int light_set_target(struct cpufreq_policy *policy, unsigned int index)
 	}
 
 	/* scaling down?  scale voltage after frequency */
-	if (new_freq < old_freq) {
+	if (new_freq < old_freq && !light_dvfs_sv) {
 		ret = regulator_set_voltage_tol(dvddm_cpu_reg, light_dvddm_volt[index], 0);
 		if (ret)
 			dev_warn(cpu_dev, "failed to scale dvddm down: %d\n", ret);
@@ -260,6 +261,11 @@ static int light_cpufreq_probe(struct platform_device *pdev)
 		ret = -ENOMEM;
 		goto free_freq_table;
 	}
+
+	if (of_get_property(np, "dvfs_sv", NULL))
+		light_dvfs_sv = true;
+	else
+		light_dvfs_sv = false;
 
 	prop = of_find_property(np, "light,dvddm-operating-points", NULL);
 	if (!prop || !prop->value)
