@@ -27,19 +27,20 @@
 
 #define IIS_SRC_CLK  294912000
 #define IIS_MCLK_SEL 256
-#define DIV_VALUE    2
+#define HDMI_DIV_VALUE    2
+#define DIV_DEFAULT	  1
 #define LIGHT_I2S_DMABUF_SIZE     (64 * 1024)
 
 #define LIGHT_RATES SNDRV_PCM_RATE_8000_384000
 #define LIGHT_FMTS (SNDRV_PCM_FMTBIT_S32_LE | SNDRV_PCM_FMTBIT_S24_LE | SNDRV_PCM_FMTBIT_S16_LE | SNDRV_PCM_FMTBIT_S8)
 
-static void light_i2s_set_div_sclk(struct light_i2s_priv *chip, u32 sample_rate, unsigned int channels)
+static void light_i2s_set_div_sclk(struct light_i2s_priv *chip, u32 sample_rate, unsigned int div_val)
 {
 	u32 div;
 	u32 div0;
 
 	div = IIS_SRC_CLK / IIS_MCLK_SEL;
-	div0 = (div + div % sample_rate) / sample_rate / DIV_VALUE;
+	div0 = (div + div % sample_rate) / sample_rate / div_val;
 
 	writel(div0, chip->regs + I2S_DIV0_LEVEL);
 }
@@ -176,16 +177,16 @@ static int light_i2s_dai_hw_params(struct snd_pcm_substream *substream, struct s
 
         switch (params_format(params)) {
         case SNDRV_PCM_FORMAT_S8:
-                val |= I2S_DATA_WIDTH_8BIT;
-		len = 8;
+		val |= I2S_DATA_8BIT_WIDTH_32BIT;
+		len = 32;
                 break;
         case SNDRV_PCM_FORMAT_S16_LE:
-                val |= I2S_DATA_WIDTH_16BIT;
-		len = 16;
+		val |= I2S_DATA_16BIT_WIDTH_32BIT;
+		len = 32;
                 break;
         case SNDRV_PCM_FORMAT_S24_LE:
-                val |= I2S_DATA_WIDTH_24BIT;
-		len = 24;
+		val |= I2S_DATA_24BIT_WIDTH_32BIT;
+		len = 32;
 		break;
 	case SNDRV_PCM_FORMAT_S32_LE:
                 val |= I2S_DATA_WIDTH_32BIT;
@@ -232,7 +233,7 @@ static int light_i2s_dai_hw_params(struct snd_pcm_substream *substream, struct s
 
         writel(funcmode, i2s_private->regs + I2S_FUNCMODE);
 
-	light_i2s_set_div_sclk(i2s_private, rate, channels);
+	light_i2s_set_div_sclk(i2s_private, rate, DIV_DEFAULT);
 
 	return 0;
 }
@@ -282,7 +283,7 @@ static int light_hdmi_dai_hw_params(struct snd_pcm_substream *substream, struct 
 
 	writel(funcmode, i2s_private->regs + I2S_FUNCMODE);
 
-	light_i2s_set_div_sclk(i2s_private, rate, channels);
+	light_i2s_set_div_sclk(i2s_private, rate, HDMI_DIV_VALUE);
 
 	return 0;
 }

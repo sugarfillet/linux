@@ -444,8 +444,11 @@
 #define DIV0LEVEL_DIV3_Msk                       (0XFFU << DIV3LEVEL_DIV3_Pos)
 
 #define I2S_DATA_WIDTH_8BIT                      (0xFU << FSSTA_DATAWTH_Pos)
+#define I2S_DATA_8BIT_WIDTH_32BIT                (0xEU << FSSTA_DATAWTH_Pos)
 #define I2S_DATA_WIDTH_16BIT                     (0U << FSSTA_DATAWTH_Pos)
+#define I2S_DATA_16BIT_WIDTH_32BIT		 (0x2U << FSSTA_DATAWTH_Pos)
 #define I2S_DATA_WIDTH_24BIT                     (0x5U << FSSTA_DATAWTH_Pos)
+#define I2S_DATA_24BIT_WIDTH_32BIT		 (0x7U << FSSTA_DATAWTH_Pos)
 #define I2S_DATA_WIDTH_32BIT                     (0xAU << FSSTA_DATAWTH_Pos)
 #define I2S_DATA_WIDTH_32BIT_OUPUT               (0x8U << FSSTA_DATAWTH_Pos)
 
