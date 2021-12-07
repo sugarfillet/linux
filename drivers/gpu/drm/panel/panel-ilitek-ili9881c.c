@@ -804,7 +804,7 @@ static const struct drm_display_mode k101_im2byl02_default_mode = {
 };
 
 static const struct drm_display_mode txd_dy800qwxpab_default_mode = {
-	.clock		= 74250,
+	.clock		= 76000,
 
 	.hdisplay	= 800,
 	.hsync_start	= 800 + 60,
