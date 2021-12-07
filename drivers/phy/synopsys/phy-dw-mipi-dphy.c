@@ -602,7 +602,7 @@ static int dw_dphy_configure(struct phy *phy, union phy_configure_opts *opts)
 	dw_dphy_pll_config(dphy, &cfg);
 
 	phy_if_cfg = FIELD_PREP(PHY_IF_CFG_N_LANES, dphy_opts->lanes - 1) |
-		     FIELD_PREP(PHY_IF_CFG_PHY_STOP_WAIT_TIME, 0x1c);
+		     FIELD_PREP(PHY_IF_CFG_PHY_STOP_WAIT_TIME, 0x2);
 	regmap_write(dphy->regmap, DW_PHY_IF_CFG, phy_if_cfg);
 
 	return 0;
