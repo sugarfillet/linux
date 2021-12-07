@@ -382,41 +382,11 @@ static int dw_dphy_pll_config(struct dw_dphy *dphy, struct dw_dphy_cfg *cfg)
 	u8 data[8];
 	u32 data_rate = DIV_ROUND_UP_ULL(cfg->hs_clk_rate, 1000000);
 
-	data[0] = FIELD_PREP(PLL_MPLL_PROG_5_0, 1);
-	dw_dphy_phy_write(dphy, TC_PLL_ANALOG_PROGRAM_CONTROL, data, 1);
-
 	data[0] = FIELD_PREP(PLL_PROP_CNTRL, data_rate >= 1150 ? 0xE : 0x8);
 	dw_dphy_phy_write(dphy, TC_PLL_PROP_CHARGE_PUMP_CTRL, data, 1);
 
-	data[0] = FIELD_PREP(PLL_INT_CNTRL, 0x0);
-	dw_dphy_phy_write(dphy, TC_PLL_INT_CHARGE_PUMP_CTRL, data, 1);
-
 	data[0] = FIELD_PREP(PLL_CPBIAS_CNTRL, 0x10);
 	dw_dphy_phy_write(dphy, TC_PLL_CHARGE_PUMP_BIAS_CTRL, data, 1);
-
-	data[0] = FIELD_PREP(PLL_GMP_CNTRL, 0x1)	|
-		  FIELD_PREP(TSTPLLDIG, TSTPLLDIG_LOCK);
-	dw_dphy_phy_write(dphy, TC_PLL_GMP_CTRL_DIGITAL_TEST, data, 1);
-
-	data[0] = FIELD_PREP(PLL_VCO_CNTRL_OVR, cfg->vco_range)	|
-		  FIELD_PREP(PLL_VCO_CNTRL_OVR_EN, 1);
-	dw_dphy_phy_write(dphy, TC_PLL_VCO_CTRL, data, 1);
-
-	if (data_rate > 1250)
-		data[0] = FIELD_PREP(PLL_M_OVR_EN, 0)	|
-			  FIELD_PREP(PLL_N_OVR_EN, 0);
-	else
-		data[0] = FIELD_PREP(PLL_M_OVR_EN, 1)	|
-			  FIELD_PREP(PLL_N_OVR_EN, 1);
-	dw_dphy_phy_write(dphy, TC_PLL_N_AND_M_DIV_CTRL, data, 1);
-
-	data[0] = FIELD_PREP(PLL_N_OVR, cfg->n_div - 1);
-	dw_dphy_phy_write(dphy, TC_PLL_N_DIV_FSM_SIG, data, 1);
-
-	pr_info("%s: m_div = %u, n_div = %u\n", __func__, cfg->m_div, cfg->n_div);
-	data[0] = FIELD_PREP(PLL_M_OVR_4_0, cfg->m_div - 2);
-	data[1] = FIELD_PREP(PLL_M_OVR_9_5, (cfg->m_div - 2) >> 5) | 1 << 7;
-	dw_dphy_phy_write(dphy, TC_PLL_M_DIV, data, 2);
 
 	return 0;
 }
@@ -487,6 +457,9 @@ static int dw_dphy_get_pll_cfg(struct dw_dphy *dphy,
 		if (DIV_ROUND_UP_ULL(opts->hs_clk_rate, 1000000) <= range->data_rate)
 			break;
 	}
+
+	/* update hs_clk_rate */
+	opts->hs_clk_rate = range->data_rate * 1000000;
 
 	vco_div = 1 << (range->vco_range >> 4);
 	fout = fout * vco_div;
