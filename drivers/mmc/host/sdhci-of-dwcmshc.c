@@ -35,7 +35,9 @@ struct dwcmshc_priv {
 	bool wprtn_ignore;
 };
 
-#define DELAY_LANE 30
+#define HS400_DELAY_LINE 24
+
+static uint32_t delay_line = 50;
 
 static void sdhci_phy_1_8v_init_no_pull(struct sdhci_host *host)
 {
@@ -111,7 +113,7 @@ static void snps_phy_1_8v_init(struct sdhci_host *host)
 	//disable delay lane
 	sdhci_writeb(host, 1 << UPDATE_DC, PHY_SDCLKDL_CNFG_R);
 	//set delay lane
-	sdhci_writeb(host, DELAY_LANE, PHY_SDCLKDL_DC_R);
+	sdhci_writeb(host, delay_line, PHY_SDCLKDL_DC_R);
 	//enable delay lane
 	val = sdhci_readb(host, PHY_SDCLKDL_CNFG_R);
 	val &= ~(1 << UPDATE_DC);
@@ -128,6 +130,8 @@ static void snps_phy_1_8v_init(struct sdhci_host *host)
 	val = (1 << RXSEL) | (2 << WEAKPULL_EN) | (3 << TXSLEW_CTRL_P) | (3 << TXSLEW_CTRL_N);
 	sdhci_writew(host, val, PHY_STBPAD_CNFG_R);
 
+	/* enable data strobe mode */
+	sdhci_writeb(host, 3 << SLV_INPSEL, PHY_DLLDL_CNFG_R);
 	sdhci_writeb(host, (1 << DLL_EN),  PHY_DLL_CTRL_R);
 }
 
@@ -150,7 +154,7 @@ static void snps_phy_3_3v_init(struct sdhci_host *host)
 	//disable delay lane
 	sdhci_writeb(host, 1 << UPDATE_DC, PHY_SDCLKDL_CNFG_R);
 	//set delay lane
-	sdhci_writeb(host, DELAY_LANE, PHY_SDCLKDL_DC_R);
+	sdhci_writeb(host, delay_line, PHY_SDCLKDL_DC_R);
 	//enable delay lane
 	val = sdhci_readb(host, PHY_SDCLKDL_CNFG_R);
 	val &= ~(1 << UPDATE_DC);
@@ -166,8 +170,6 @@ static void snps_phy_3_3v_init(struct sdhci_host *host)
 
 	val = (2 << RXSEL) | (2 << WEAKPULL_EN) | (3 << TXSLEW_CTRL_P) | (3 << TXSLEW_CTRL_N);
 	sdhci_writew(host, val, PHY_STBPAD_CNFG_R);
-
-	sdhci_writeb(host, (1 << DLL_EN),  PHY_DLL_CTRL_R);
 }
 
 static int __sdhci_execute_tuning(struct sdhci_host *host, u32 opcode)
@@ -282,8 +284,7 @@ static void snps_sdhci_reset(struct sdhci_host *host, u8 mask)
 		emmc_ctl &=~(1 << CARD_IS_EMMC);
 	}
 	sdhci_writeb(host, emmc_ctl, EMMC_CTRL_R);
-	/*set i wait*/
-	sdhci_writeb(host, 0x5, PHY_DLL_CNFG1_R);
+	sdhci_writeb(host, 0x25, PHY_DLL_CNFG1_R);
 }
 /*
  * If DMA addr spans 128MB boundary, we split the DMA transfer into two
@@ -366,7 +367,7 @@ static void dwcmshc_set_uhs_signaling(struct sdhci_host *host,
 		// //disable delay lane
 		// sdhci_writeb(host, 1 << UPDATE_DC, PHY_SDCLKDL_CNFG_R);
 		// //set delay lane
-		// sdhci_writeb(host, DELAY_LANE, PHY_SDCLKDL_DC_R);
+		// sdhci_writeb(host, delay_line, PHY_SDCLKDL_DC_R);
 		// //enable delay lane
 		// reg = sdhci_readb(host, PHY_SDCLKDL_CNFG_R);
 		// reg &= ~(1 << UPDATE_DC);
@@ -376,8 +377,8 @@ static void dwcmshc_set_uhs_signaling(struct sdhci_host *host,
 		u32 reg = sdhci_readl(host, AT_CTRL_R);
 		reg &= ~1;
 		sdhci_writel(host, reg, AT_CTRL_R);
-		//used ds clock
-		sdhci_writeb(host, 3 << SLV_INPSEL, PHY_DLLDL_CNFG_R);
+
+		delay_line = HS400_DELAY_LINE;
 	} else {
 		sdhci_writeb(host, 0, PHY_DLLDL_CNFG_R);
 	}
