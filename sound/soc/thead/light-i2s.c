@@ -29,6 +29,8 @@
 #define IIS_MCLK_SEL 256
 #define HDMI_DIV_VALUE    2
 #define DIV_DEFAULT	  1
+#define MONO_SOURCE	  1
+
 #define LIGHT_I2S_DMABUF_SIZE     (64 * 1024)
 
 #define LIGHT_RATES SNDRV_PCM_RATE_8000_384000
@@ -170,6 +172,7 @@ static int light_i2s_dai_hw_params(struct snd_pcm_substream *substream, struct s
 	u32 sclk_sel = 0;
 	u32 rate;
 	u32 funcmode;
+	u32 iiscnf_out;
 
 	u32 channels = params_channels(params);
 
@@ -233,6 +236,14 @@ static int light_i2s_dai_hw_params(struct snd_pcm_substream *substream, struct s
 
         writel(funcmode, i2s_private->regs + I2S_FUNCMODE);
 
+	iiscnf_out = readl(i2s_private->regs + I2S_IISCNF_OUT);
+	if (channels == MONO_SOURCE)
+		iiscnf_out |= IISCNFOUT_TX_VOICE_EN_MONO;
+	else
+		iiscnf_out &= ~IISCNFOUT_TX_VOICE_EN_MONO;
+
+	writel(iiscnf_out, i2s_private->regs + I2S_IISCNF_OUT);
+
 	light_i2s_set_div_sclk(i2s_private, rate, DIV_DEFAULT);
 
 	return 0;
@@ -246,6 +257,7 @@ static int light_hdmi_dai_hw_params(struct snd_pcm_substream *substream, struct 
 	u32 len = 0;
 	u32 rate;
 	u32 funcmode;
+	u32 iiscnf_out;
 
 	u32 channels = params_channels(params);
 
@@ -282,6 +294,14 @@ static int light_hdmi_dai_hw_params(struct snd_pcm_substream *substream, struct 
 	}
 
 	writel(funcmode, i2s_private->regs + I2S_FUNCMODE);
+
+	iiscnf_out = readl(i2s_private->regs + I2S_IISCNF_OUT);
+	if (channels == MONO_SOURCE)
+		iiscnf_out |= IISCNFOUT_TX_VOICE_EN_MONO;
+	else
+		iiscnf_out &= ~IISCNFOUT_TX_VOICE_EN_MONO;
+
+	writel(iiscnf_out, i2s_private->regs + I2S_IISCNF_OUT);
 
 	light_i2s_set_div_sclk(i2s_private, rate, HDMI_DIV_VALUE);
 
