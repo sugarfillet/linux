@@ -30,6 +30,7 @@
 #define HDMI_DIV_VALUE    2
 #define DIV_DEFAULT	  1
 #define MONO_SOURCE	  1
+#define STEREO_CHANNEL    2
 
 #define LIGHT_I2S_DMABUF_SIZE     (64 * 1024)
 
@@ -178,65 +179,70 @@ static int light_i2s_dai_hw_params(struct snd_pcm_substream *substream, struct s
 
 	rate = params_rate(params);
 
-        switch (params_format(params)) {
-        case SNDRV_PCM_FORMAT_S8:
+	iiscnf_out = readl(i2s_private->regs + I2S_IISCNF_OUT);
+
+	switch (params_format(params)) {
+	case SNDRV_PCM_FORMAT_S8:
 		val |= I2S_DATA_8BIT_WIDTH_32BIT;
+		iiscnf_out &= ~IISCNFOUT_TALOLRC_HIGHFORLEFT;
 		len = 32;
                 break;
-        case SNDRV_PCM_FORMAT_S16_LE:
+	case SNDRV_PCM_FORMAT_S16_LE:
 		val |= I2S_DATA_16BIT_WIDTH_32BIT;
+		iiscnf_out |= IISCNFOUT_TALOLRC_HIGHFORLEFT;
 		len = 32;
-                break;
-        case SNDRV_PCM_FORMAT_S24_LE:
-		val |= I2S_DATA_24BIT_WIDTH_32BIT;
+		break;
+	case SNDRV_PCM_FORMAT_S24_LE:
+		val |= I2S_DATA_WIDTH_24BIT;
+		iiscnf_out &= ~IISCNFOUT_TALOLRC_HIGHFORLEFT;
 		len = 32;
 		break;
 	case SNDRV_PCM_FORMAT_S32_LE:
-                val |= I2S_DATA_WIDTH_32BIT;
+		val |= I2S_DATA_WIDTH_32BIT;
+		iiscnf_out &= ~IISCNFOUT_TALOLRC_HIGHFORLEFT;
 		len = 32;
 		break;
 	default:
 		pr_err("Unknown data format\n");
 		return -EINVAL;
-        }
+	}
 
-	sclk_sel = len*channels;
+	sclk_sel = len*STEREO_CHANNEL;
 
-        switch (sclk_sel) {
-        case 16:
+	switch (sclk_sel) {
+	case 16:
 		val |= FSSTA_SCLK_SEL_16;
-                break;
-        case 32:
+		break;
+	case 32:
 		val |= FSSTA_SCLK_SEL_32;
 		break;
-        case 48:
+	case 48:
 		val |= FSSTA_SCLK_SEL_48;
 		break;
-        case 64:
+	case 64:
 		val |= FSSTA_SCLK_SEL_64;
-                break;
-        default:
-                pr_err("Not support channel num %d\n", channels);
-                return -EINVAL;
-        }
+		break;
+	default:
+		pr_err("Not support channel num %d\n", channels);
+		return -EINVAL;
+	}
 
-        regmap_update_bits(i2s_private->regmap, I2S_FSSTA,
-                          FSSTA_DATAWTH_Msk | FSSTA_SCLK_SEL_Msk,
-                          val);
-        funcmode = readl(i2s_private->regs + I2S_FUNCMODE);
-        if (tx) {
-                funcmode |= FUNCMODE_TMODE_WEN;
-                funcmode &= ~FUNCMODE_TMODE;
-                funcmode |= FUNCMODE_TMODE;
-        } else {
-                funcmode |= FUNCMODE_RMODE_WEN;
-                funcmode &= ~FUNCMODE_RMODE;
-                funcmode |= FUNCMODE_RMODE;
-        }
+	regmap_update_bits(i2s_private->regmap, I2S_FSSTA,
+			FSSTA_DATAWTH_Msk | FSSTA_SCLK_SEL_Msk,
+			val);
+	funcmode = readl(i2s_private->regs + I2S_FUNCMODE);
+	if (tx) {
+		funcmode |= FUNCMODE_TMODE_WEN;
+		funcmode &= ~FUNCMODE_TMODE;
+		funcmode |= FUNCMODE_TMODE;
+	} else {
+		funcmode |= FUNCMODE_RMODE_WEN;
+		funcmode &= ~FUNCMODE_RMODE;
+		funcmode |= FUNCMODE_RMODE;
+	}
 
-        writel(funcmode, i2s_private->regs + I2S_FUNCMODE);
+	writel(funcmode, i2s_private->regs + I2S_FUNCMODE);
 
-	iiscnf_out = readl(i2s_private->regs + I2S_IISCNF_OUT);
 	if (channels == MONO_SOURCE)
 		iiscnf_out |= IISCNFOUT_TX_VOICE_EN_MONO;
 	else
