@@ -9,6 +9,13 @@ config LIGHT_IOPMP
 	help
 	  This driver supports Light IOPMP built-in for security system.
 
+config LIGHT_SUSPEND
+	bool "Thead light system suspend support"
+	depends on PM
+	default n
+	help
+	 This driver supports system suspend low power feature in Light FM platform
+
 endmenu
 
 endif
