@@ -14,6 +14,7 @@
 #undef pr_fmt
 #define pr_fmt(fmt) "light-system-suspend" ": " fmt
 
+#ifdef CONFIG_PLIC_INT_CLEAR
 void __iomem *hart0_sbase;
 /*
  * Each hart context has a set of control registers associated with it.  Right
@@ -24,6 +25,7 @@ void __iomem *hart0_sbase;
 #define CONTEXT_PER_HART		0x1000
 #define CONTEXT_THRESHOLD		0x00
 #define CONTEXT_CLAIM			0x04
+#endif
 
 static int light_suspend_prepare_late(void)
 {
@@ -43,7 +45,7 @@ static int light_suspend_prepare_late(void)
 	 * Two-level switch for interrupt control: it needs to disable interrupts in SIE, not just in SSTATUS,
 	 * otherwise the pending interrupts will wakup the cpu immediately after wfi.
 	 */
-	asm volatile("csrw sie, zero\n");
+	csr_write(CSR_IE, 0);
 
 	return 0;
 }
