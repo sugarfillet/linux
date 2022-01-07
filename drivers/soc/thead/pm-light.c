@@ -2,7 +2,6 @@
 /*
  * Copyright (C) 2022 Alibaba Group Holding Limited.
  */
-
 #include <asm/cpuidle.h>
 #include <linux/delay.h>
 #include <linux/kernel.h>
@@ -28,6 +27,7 @@ void __iomem *hart0_sbase;
 
 static int light_suspend_prepare_late(void)
 {
+#ifdef CONFIG_PLIC_INT_CLEAR
 	void __iomem *claim = hart0_sbase + CONTEXT_CLAIM;
 	irq_hw_number_t hwirq;
 
@@ -38,6 +38,12 @@ static int light_suspend_prepare_late(void)
 		pr_debug("claim hwirq%ld\n", hwirq);
 		writel(hwirq, claim);
 	}
+#endif
+	/*
+	 * Two-level switch for interrupt control: it needs to disable interrupts in SIE, not just in SSTATUS,
+	 * otherwise the pending interrupts will wakup the cpu immediately after wfi.
+	 */
+	asm volatile("csrw sie, zero\n");
 
 	return 0;
 }
@@ -68,6 +74,7 @@ static const struct platform_suspend_ops light_suspend_ops = {
 
 static int __init pm_light_init(void)
 {
+#ifdef CONFIG_PLIC_INT_CLEAR
 	struct device_node *np;
 	void __iomem *regs;
 
@@ -86,6 +93,7 @@ static int __init pm_light_init(void)
 	hart0_sbase = regs + CONTEXT_BASE + 1 * CONTEXT_PER_HART; /* 1 means s mode */
 
 	pr_debug("hart0_sbase = 0x%lx\n", (unsigned long)hart0_sbase);
+#endif
 
 	pr_info("set system suspend platform callbacks\n");
 
