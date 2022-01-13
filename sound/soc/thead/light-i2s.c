@@ -141,25 +141,31 @@ static int light_i2s_set_fmt_dai(struct snd_soc_dai *cpu_dai, unsigned int fmt)
 {
 	struct light_i2s_priv *i2s_private = snd_soc_dai_get_drvdata(cpu_dai);
 	u32 cnfout = 0;
+	u32 cnfin = 0;
 
 	switch (fmt & SND_SOC_DAIFMT_FORMAT_MASK) {
-	 case SND_SOC_DAIFMT_I2S:
-                 cnfout |= IISCNFOUT_TSAFS_I2S;
-                 break;
-         case SND_SOC_DAIFMT_RIGHT_J:
-		 cnfout |= IISCNFOUT_TSAFS_RIGHT_JUSTIFIED;
-                 break;
-         case SND_SOC_DAIFMT_LEFT_J:
-		 cnfout |= IISCNFOUT_TSAFS_LEFT_JUSTIFIED;
-                 break;
-	 default:
-                  pr_err("Unknown fmt dai\n");
-                  return -EINVAL;
-         }
+	case SND_SOC_DAIFMT_I2S:
+		cnfout |= IISCNFOUT_TSAFS_I2S;
+		break;
+	case SND_SOC_DAIFMT_RIGHT_J:
+		cnfout |= IISCNFOUT_TSAFS_RIGHT_JUSTIFIED;
+		break;
+	case SND_SOC_DAIFMT_LEFT_J:
+		cnfout |= IISCNFOUT_TSAFS_LEFT_JUSTIFIED;
+		break;
+	default:
+		pr_err("Unknown fmt dai\n");
+		return -EINVAL;
+	}
 
-         regmap_update_bits(i2s_private->regmap, I2S_IISCNF_OUT,
-                           IISCNFOUT_TSAFS_MSK,
-                           cnfout);
+	regmap_update_bits(i2s_private->regmap, I2S_IISCNF_OUT,
+			IISCNFOUT_TSAFS_MSK,
+			cnfout);
+
+	cnfin |= CNFIN_I2S_RXMODE_MASTER_MODE;
+	regmap_update_bits(i2s_private->regmap, I2S_IISCNF_IN,
+			CNFIN_I2S_RXMODE_Msk,
+			cnfin);
 
 	return 0;
 }
@@ -174,32 +180,30 @@ static int light_i2s_dai_hw_params(struct snd_pcm_substream *substream, struct s
 	u32 rate;
 	u32 funcmode;
 	u32 iiscnf_out;
+	u32 iiscnf_in;
 
 	u32 channels = params_channels(params);
 
 	rate = params_rate(params);
 
 	iiscnf_out = readl(i2s_private->regs + I2S_IISCNF_OUT);
+	iiscnf_in = readl(i2s_private->regs + I2S_IISCNF_IN);
 
 	switch (params_format(params)) {
 	case SNDRV_PCM_FORMAT_S8:
 		val |= I2S_DATA_8BIT_WIDTH_32BIT;
-		iiscnf_out &= ~IISCNFOUT_TALOLRC_HIGHFORLEFT;
 		len = 32;
                 break;
 	case SNDRV_PCM_FORMAT_S16_LE:
-		val |= I2S_DATA_16BIT_WIDTH_32BIT;
-		iiscnf_out |= IISCNFOUT_TALOLRC_HIGHFORLEFT;
+		val |= I2S_DATA_WIDTH_16BIT;
 		len = 32;
 		break;
 	case SNDRV_PCM_FORMAT_S24_LE:
 		val |= I2S_DATA_WIDTH_24BIT;
-		iiscnf_out &= ~IISCNFOUT_TALOLRC_HIGHFORLEFT;
 		len = 32;
 		break;
 	case SNDRV_PCM_FORMAT_S32_LE:
 		val |= I2S_DATA_WIDTH_32BIT;
-		iiscnf_out &= ~IISCNFOUT_TALOLRC_HIGHFORLEFT;
 		len = 32;
 		break;
 	default:
@@ -233,22 +237,37 @@ static int light_i2s_dai_hw_params(struct snd_pcm_substream *substream, struct s
 	funcmode = readl(i2s_private->regs + I2S_FUNCMODE);
 	if (tx) {
 		funcmode |= FUNCMODE_TMODE_WEN;
+		funcmode &= ~FUNCMODE_CH1_ENABLE;
+		funcmode |= FUNCMODE_RMODE_WEN;
+		funcmode &= ~FUNCMODE_RMODE;
 		funcmode &= ~FUNCMODE_TMODE;
 		funcmode |= FUNCMODE_TMODE;
 	} else {
 		funcmode |= FUNCMODE_RMODE_WEN;
+		funcmode |= FUNCMODE_CH0_ENABLE;
+		funcmode |= FUNCMODE_CH1_ENABLE;
+		funcmode |= FUNCMODE_TMODE_WEN;
+		funcmode &= ~FUNCMODE_TMODE;
 		funcmode &= ~FUNCMODE_RMODE;
 		funcmode |= FUNCMODE_RMODE;
 	}
 
 	writel(funcmode, i2s_private->regs + I2S_FUNCMODE);
 
-	if (channels == MONO_SOURCE)
+	if (channels == MONO_SOURCE) {
 		iiscnf_out |= IISCNFOUT_TX_VOICE_EN_MONO;
-	else
+		iiscnf_in |= CNFIN_RX_CH_SEL_LEFT;
+		iiscnf_in |= CNFIN_RVOICEEN_MONO;
+	} else {
 		iiscnf_out &= ~IISCNFOUT_TX_VOICE_EN_MONO;
+		iiscnf_in &= ~CNFIN_RX_CH_SEL_LEFT;
+		iiscnf_in &= ~CNFIN_RVOICEEN_MONO;
+	}
 
-	writel(iiscnf_out, i2s_private->regs + I2S_IISCNF_OUT);
+	if (tx)
+		writel(iiscnf_out, i2s_private->regs + I2S_IISCNF_OUT);
+	else
+		writel(iiscnf_in, i2s_private->regs + I2S_IISCNF_IN);
 
 	light_i2s_set_div_sclk(i2s_private, rate, DIV_DEFAULT);
 
@@ -309,7 +328,7 @@ static int light_hdmi_dai_hw_params(struct snd_pcm_substream *substream, struct 
 
 	writel(iiscnf_out, i2s_private->regs + I2S_IISCNF_OUT);
 
-	light_i2s_set_div_sclk(i2s_private, rate, HDMI_DIV_VALUE);
+	light_i2s_set_div_sclk(i2s_private, rate, DIV_DEFAULT);
 
 	return 0;
 }
@@ -363,12 +382,6 @@ static struct snd_soc_dai_driver light_i2s_soc_dai[] = {
 		.probe = light_i2s_dai_probe,
 		.name			= "light-hdmi-dai",
 		.playback = {
-			.rates		= LIGHT_RATES,
-			.formats	= LIGHT_FMTS,
-			.channels_min	= 1,
-			.channels_max	= 2,
-		},
-		.capture = {
 			.rates		= LIGHT_RATES,
 			.formats	= LIGHT_FMTS,
 			.channels_min	= 1,
@@ -457,6 +470,8 @@ static int light_i2s_runtime_resume(struct device *dev)
                 return ret;
         }
 
+        regcache_cache_only(i2s_priv->regmap, false);
+
         return ret;
 }
 
@@ -537,10 +552,12 @@ static int light_audio_i2s_probe(struct platform_device *pdev)
         if (ret < 0)
                 return ret;
 
+	i2s_priv->dma_params_tx.addr_width = DMA_SLAVE_BUSWIDTH_4_BYTES;
+	i2s_priv->dma_params_rx.addr_width = DMA_SLAVE_BUSWIDTH_4_BYTES;
 	i2s_priv->dma_params_tx.maxburst = i2s_priv->dma_maxburst;
 	i2s_priv->dma_params_rx.maxburst = i2s_priv->dma_maxburst;
 	i2s_priv->dma_params_tx.addr = res->start + I2S_DR;
-	i2s_priv->dma_params_rx.addr = res->start + I2S_DR;
+	i2s_priv->dma_params_rx.addr = res->start + I2S_DR1;
 
 	light_pcm_probe(pdev, i2s_priv);
 
