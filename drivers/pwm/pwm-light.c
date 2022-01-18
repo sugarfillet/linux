@@ -173,7 +173,7 @@ static int pwm_light_probe(struct platform_device *pdev)
 	struct resource *res;
 	int ret;
 
-	plc = devm_kzalloc(&pdev->dev, sizeof(*res), GFP_KERNEL);
+	plc = devm_kzalloc(&pdev->dev, sizeof(*plc), GFP_KERNEL);
 	if (!plc)
 		return -ENOMEM;
 
