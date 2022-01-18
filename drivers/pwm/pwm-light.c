@@ -15,6 +15,7 @@
 #include <linux/of.h>
 #include <linux/of_device.h>
 #include <linux/platform_device.h>
+#include <linux/pm_runtime.h>
 #include <linux/pwm.h>
 #include <linux/slab.h>
 
@@ -57,14 +58,12 @@ static int pwm_light_clk_prepare_enable(struct pwm_chip *chip)
 	int ret;
 
 	ret = clk_prepare_enable(plc->pwm_pclk);
-	if (ret) {
-		clk_disable_unprepare(plc->pwm_pclk);
+	if (ret)
 		return ret;
-	}
 
 	ret = clk_prepare_enable(plc->pwm_cclk);
 	if (ret) {
-		clk_disable_unprepare(plc->pwm_cclk);
+		clk_disable_unprepare(plc->pwm_pclk);
 		return ret;
 	}
 
@@ -83,6 +82,14 @@ static int pwm_light_enable(struct pwm_chip *chip, struct pwm_device *pwm)
 {
 	struct pwm_light_chip *plc = to_pwm_light_chip(chip);
 	u32 value;
+	int ret;
+
+	ret = pm_runtime_get_sync(chip->dev);
+	if (ret < 0) {
+		dev_err(chip->dev, "failed to clock on the pwm device(%d)\n", ret);
+		pm_runtime_put_noidle(chip->dev);
+		return ret;
+	}
 
 	value = readl(plc->mmio_base + LIGHT_PWM_CTRL(pwm->hwpwm));
 	value |= PWM_START;
@@ -99,6 +106,8 @@ static void pwm_light_disable(struct pwm_chip *chip, struct pwm_device *pwm)
 	value = readl(plc->mmio_base + LIGHT_PWM_CTRL(pwm->hwpwm));
 	value &= ~PWM_START;
 	writel(value, plc->mmio_base + LIGHT_PWM_CTRL(pwm->hwpwm));
+
+	pm_runtime_put_sync(chip->dev);
 }
 
 static int pwm_light_config(struct pwm_chip *chip, struct pwm_device *pwm, int duty_ns, int period_ns)
@@ -107,12 +116,19 @@ static int pwm_light_config(struct pwm_chip *chip, struct pwm_device *pwm, int d
 	unsigned long rate = clk_get_rate(plc->pwm_cclk);
 	unsigned long duty_cycle, period_cycle;
 	u32 pwm_cfg = PWM_INFACTOUT | PWM_FPOUT | PWM_CONTINUOUS_MODE | PWM_INT_EN;
+	int ret;
 
 	if (duty_ns > period_ns) {
 		dev_err(chip->dev, "invalid pwm configure\n");
 		return -EINVAL;
 	}
 
+	ret = pm_runtime_get_sync(chip->dev);
+	if (ret < 0) {
+		dev_err(chip->dev, "failed to clock on the pwm device(%d)\n", ret);
+		pm_runtime_put_noidle(chip->dev);
+		return ret;
+	}
 
 	writel(pwm_cfg, plc->mmio_base + LIGHT_PWM_CTRL(pwm->hwpwm));	//0x328
 
@@ -139,6 +155,8 @@ static int pwm_light_config(struct pwm_chip *chip, struct pwm_device *pwm, int d
 	pwm_cfg = readl(plc->mmio_base + LIGHT_PWM_CTRL(pwm->hwpwm));
 	writel(pwm_cfg | PWM_CFG_UPDATE, plc->mmio_base + LIGHT_PWM_CTRL(pwm->hwpwm));	//0x32c
 
+	pm_runtime_put_sync(chip->dev);
+
 	return 0;
 }
 
@@ -146,6 +164,15 @@ static int pwm_light_set_polarity(struct pwm_chip *chip, struct pwm_device *pwm,
 {
 	struct pwm_light_chip *plc = to_pwm_light_chip(chip);
 	u32 value = readl(plc->mmio_base + LIGHT_PWM_CTRL(pwm->hwpwm));
+	int ret;
+
+	ret = pm_runtime_get_sync(chip->dev);
+	if (ret < 0) {
+		dev_err(chip->dev, "failed to clock on the pwm device(%d)\n", ret);
+		pm_runtime_put_noidle(chip->dev);
+		return ret;
+	}
+
 
 	if (polarity == PWM_POLARITY_INVERSED)
 		/* Duty cycle defines LOW period of PWM */
@@ -155,6 +182,8 @@ static int pwm_light_set_polarity(struct pwm_chip *chip, struct pwm_device *pwm,
 		value &= ~PWM_FPOUT;
 
 	writel(value, plc->mmio_base + LIGHT_PWM_CTRL(pwm->hwpwm));
+
+	pm_runtime_put_sync(chip->dev);
 
 	return 0;
 }
@@ -166,6 +195,29 @@ static const struct pwm_ops pwm_light_ops = {
 	.set_polarity = pwm_light_set_polarity,
 	.owner = THIS_MODULE,
 };
+
+static int __maybe_unused light_pwm_runtime_suspend(struct device *dev)
+{
+	struct pwm_light_chip *plc = dev_get_drvdata(dev);
+
+	pwm_light_clk_disable_unprepare(&plc->chip);
+
+	return 0;
+}
+
+static int __maybe_unused light_pwm_runtime_resume(struct device *dev)
+{
+	struct pwm_light_chip *plc = dev_get_drvdata(dev);
+	int ret;
+
+	ret = pwm_light_clk_prepare_enable(&plc->chip);
+	if (ret) {
+		dev_err(dev, "failed to enable pwm clock(%d)\n", ret);
+		return ret;
+	}
+
+	return 0;
+}
 
 static int pwm_light_probe(struct platform_device *pdev)
 {
@@ -194,11 +246,13 @@ static int pwm_light_probe(struct platform_device *pdev)
 		return PTR_ERR(plc->pwm_cclk);
 	}
 
+#ifndef CONFIG_PM
 	ret = pwm_light_clk_prepare_enable(&plc->chip);
 	if (ret) {
 		dev_err(&pdev->dev, "failed to enable pwm clock(%d)\n", ret);
 		return ret;
 	}
+#endif
 
 	res = platform_get_resource(pdev, IORESOURCE_MEM, 0);
 	plc->mmio_base = devm_ioremap_resource(&pdev->dev, res);
@@ -213,6 +267,8 @@ static int pwm_light_probe(struct platform_device *pdev)
 	if (ret)
 		return ret;
 
+	pm_runtime_enable(&pdev->dev);
+
 	dev_info(&pdev->dev, "succeed to add a pwm chip\n");
 
 	return 0;
@@ -224,6 +280,8 @@ static int pwm_light_remove(struct platform_device *pdev)
 
 	pwm_light_clk_disable_unprepare(&plc->chip);
 
+	pm_runtime_disable(&pdev->dev);
+
 	return pwmchip_remove(&plc->chip);
 }
 
@@ -232,10 +290,15 @@ static const struct of_device_id pwm_light_dt_ids[] = {
 	{/* sentinel */}
 };
 
+static const struct dev_pm_ops pwm_runtime_pm_ops = {
+	SET_RUNTIME_PM_OPS(light_pwm_runtime_suspend, light_pwm_runtime_resume, NULL)
+};
+
 static struct platform_driver pwm_light_driver = {
 	.driver = {
 		.name = "pwm-light",
 		.of_match_table = pwm_light_dt_ids,
+		.pm = &pwm_runtime_pm_ops,
 	},
 	.probe = pwm_light_probe,
 	.remove = pwm_light_remove,
