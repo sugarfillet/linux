@@ -181,6 +181,7 @@ static int light_i2s_dai_hw_params(struct snd_pcm_substream *substream, struct s
 	u32 funcmode;
 	u32 iiscnf_out;
 	u32 iiscnf_in;
+	u32 i2s_en;
 
 	u32 channels = params_channels(params);
 
@@ -230,6 +231,9 @@ static int light_i2s_dai_hw_params(struct snd_pcm_substream *substream, struct s
 		pr_err("Not support channel num %d\n", channels);
 		return -EINVAL;
 	}
+
+	i2s_en &= ~IISEN_I2SEN;
+	writel(i2s_en, i2s_private->regs + I2S_IISEN);
 
 	regmap_update_bits(i2s_private->regmap, I2S_FSSTA,
 			FSSTA_DATAWTH_Msk | FSSTA_SCLK_SEL_Msk,
@@ -283,6 +287,7 @@ static int light_hdmi_dai_hw_params(struct snd_pcm_substream *substream, struct 
 	u32 rate;
 	u32 funcmode;
 	u32 iiscnf_out;
+	u32 i2s_en;
 
 	u32 channels = params_channels(params);
 
@@ -303,6 +308,9 @@ static int light_hdmi_dai_hw_params(struct snd_pcm_substream *substream, struct 
 	}
 
 	val |= FSSTA_SCLK_SEL_64;
+
+	i2s_en &= ~IISEN_I2SEN;
+	writel(i2s_en, i2s_private->regs + I2S_IISEN);
 
 	regmap_update_bits(i2s_private->regmap, I2S_FSSTA,
 			FSSTA_DATAWTH_Msk | FSSTA_SCLK_SEL_Msk,
