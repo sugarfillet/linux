@@ -49,11 +49,10 @@ struct ili9881c {
 	struct mipi_dsi_device	*dsi;
 	const struct ili9881c_desc	*desc;
 
-	struct regulator	*power;
 	struct gpio_desc	*reset;
 
-	struct gpio_desc        *lcd_en;
-	struct gpio_desc        *lcd_bias_en;
+	struct regulator_bulk_data *supplies;
+	unsigned int num_supplies;
 };
 
 #define ILI9881C_SWITCH_PAGE_INSTR(_page)	\
@@ -74,6 +73,30 @@ struct ili9881c {
 			},				\
 		},					\
 	}
+
+static const char * const ili9881c_supplies[] = {
+	"vdd1v8",
+	"vspn5v7",
+};
+
+static int ili9881c_init_regulators(struct ili9881c *ctx)
+{
+	int i;
+	struct device *dev = &ctx->dsi->dev;
+
+	ctx->num_supplies = ARRAY_SIZE(ili9881c_supplies);
+	ctx->supplies = devm_kzalloc(dev,
+				ctx->num_supplies * sizeof(ctx->supplies),
+				GFP_KERNEL);
+
+	if (!ctx->supplies)
+		return -ENOMEM;
+
+	for (i = 0; i < ctx->num_supplies; i++)
+		ctx->supplies[i].supply = ili9881c_supplies[i];
+
+	return devm_regulator_bulk_get(dev, ctx->num_supplies, ctx->supplies);
+}
 
 static const struct ili9881c_instr lhr050h41_init[] = {
 	ILI9881C_SWITCH_PAGE_INSTR(3),
@@ -699,7 +722,7 @@ static int ili9881c_prepare(struct drm_panel *panel)
 	int ret;
 
 	/* Power the panel */
-	ret = regulator_enable(ctx->power);
+	ret = regulator_bulk_enable(ctx->num_supplies, ctx->supplies);
 	if (ret)
 		return ret;
 	msleep(5);
@@ -760,11 +783,15 @@ static int ili9881c_disable(struct drm_panel *panel)
 
 static int ili9881c_unprepare(struct drm_panel *panel)
 {
+	int ret;
 	struct ili9881c *ctx = panel_to_ili9881c(panel);
 
 	mipi_dsi_dcs_enter_sleep_mode(ctx->dsi);
-	regulator_disable(ctx->power);
 	gpiod_set_value(ctx->reset, 1);
+
+	ret = regulator_bulk_disable(ctx->num_supplies, ctx->supplies);
+	if (ret)
+		return ret;
 
 	return 0;
 }
@@ -871,29 +898,15 @@ static int ili9881c_dsi_probe(struct mipi_dsi_device *dsi)
 	drm_panel_init(&ctx->panel, &dsi->dev, &ili9881c_funcs,
 		       DRM_MODE_CONNECTOR_DSI);
 
-	ctx->power = devm_regulator_get(&dsi->dev, "power");
-	if (IS_ERR(ctx->power)) {
-		dev_err(&dsi->dev, "Couldn't get our power regulator\n");
-		return PTR_ERR(ctx->power);
-	}
-
 	ctx->reset = devm_gpiod_get(&dsi->dev, "reset", GPIOD_OUT_LOW);
 	if (IS_ERR(ctx->reset)) {
 		dev_err(&dsi->dev, "Couldn't get our reset GPIO\n");
 		return PTR_ERR(ctx->reset);
 	}
 
-	ctx->lcd_en = devm_gpiod_get(&dsi->dev, "lcd-en", GPIOD_OUT_HIGH);
-	if (IS_ERR(ctx->lcd_en)) {
-		dev_err(&dsi->dev, "Couldn't get our lcd-en GPIO\n");
-		return PTR_ERR(ctx->lcd_en);
-	}
-
-	ctx->lcd_bias_en = devm_gpiod_get(&dsi->dev, "lcd-bias-en", GPIOD_OUT_HIGH);
-	if (IS_ERR(ctx->lcd_bias_en)) {
-		dev_err(&dsi->dev, "Couldn't get our lcd-bias-en GPIO\n");
-		return PTR_ERR(ctx->lcd_bias_en);
-	}
+	ret = ili9881c_init_regulators(ctx);
+	if (ret)
+		return ret;
 
 	ret = drm_panel_of_backlight(&ctx->panel);
 	if (ret)
