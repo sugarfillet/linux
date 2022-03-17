@@ -53,6 +53,8 @@ struct ili9881c {
 
 	struct regulator_bulk_data *supplies;
 	unsigned int num_supplies;
+
+	bool prepared;
 };
 
 #define ILI9881C_SWITCH_PAGE_INSTR(_page)	\
@@ -86,7 +88,7 @@ static int ili9881c_init_regulators(struct ili9881c *ctx)
 
 	ctx->num_supplies = ARRAY_SIZE(ili9881c_supplies);
 	ctx->supplies = devm_kzalloc(dev,
-				ctx->num_supplies * sizeof(ctx->supplies),
+				ctx->num_supplies * sizeof(*ctx->supplies),
 				GFP_KERNEL);
 
 	if (!ctx->supplies)
@@ -718,8 +720,10 @@ static int ili9881c_send_cmd_data(struct ili9881c *ctx, u8 cmd, u8 data)
 static int ili9881c_prepare(struct drm_panel *panel)
 {
 	struct ili9881c *ctx = panel_to_ili9881c(panel);
-	unsigned int i;
 	int ret;
+
+	if (ctx->prepared)
+	    return 0;
 
 	/* Power the panel */
 	ret = regulator_bulk_enable(ctx->num_supplies, ctx->supplies);
@@ -734,7 +738,19 @@ static int ili9881c_prepare(struct drm_panel *panel)
 	gpiod_set_value(ctx->reset, 0);
 	msleep(20);
 
+	ctx->prepared = true;
+
+	return 0;
+}
+
+static int ili9881c_enable(struct drm_panel *panel)
+{
+	int ret;
+	unsigned int i;
+	struct ili9881c *ctx = panel_to_ili9881c(panel);
+
 	ctx->dsi->mode_flags |= MIPI_DSI_MODE_LPM;
+
 	for (i = 0; i < ctx->desc->init_length; i++) {
 		const struct ili9881c_instr *instr = &ctx->desc->init[i];
 
@@ -760,13 +776,6 @@ static int ili9881c_prepare(struct drm_panel *panel)
 	if (ret)
 		return ret;
 
-	return 0;
-}
-
-static int ili9881c_enable(struct drm_panel *panel)
-{
-	struct ili9881c *ctx = panel_to_ili9881c(panel);
-
 	msleep(120);
 
 	mipi_dsi_dcs_set_display_on(ctx->dsi);
@@ -776,9 +785,18 @@ static int ili9881c_enable(struct drm_panel *panel)
 
 static int ili9881c_disable(struct drm_panel *panel)
 {
+	int ret;
 	struct ili9881c *ctx = panel_to_ili9881c(panel);
 
-	return mipi_dsi_dcs_set_display_off(ctx->dsi);
+	ctx->dsi->mode_flags |= MIPI_DSI_MODE_LPM;
+
+	ret = mipi_dsi_dcs_set_display_off(ctx->dsi);
+	if (ret)
+		return ret;
+
+	msleep(10);
+
+	return mipi_dsi_dcs_enter_sleep_mode(ctx->dsi);
 }
 
 static int ili9881c_unprepare(struct drm_panel *panel)
@@ -786,12 +804,16 @@ static int ili9881c_unprepare(struct drm_panel *panel)
 	int ret;
 	struct ili9881c *ctx = panel_to_ili9881c(panel);
 
-	mipi_dsi_dcs_enter_sleep_mode(ctx->dsi);
+	if (!ctx->prepared)
+	    return 0;
+
 	gpiod_set_value(ctx->reset, 1);
 
 	ret = regulator_bulk_disable(ctx->num_supplies, ctx->supplies);
 	if (ret)
 		return ret;
+
+	ctx->prepared = false;
 
 	return 0;
 }
