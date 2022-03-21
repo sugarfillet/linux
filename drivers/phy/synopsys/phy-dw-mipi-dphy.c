@@ -167,6 +167,8 @@ struct dw_dphy {
 	struct clk *refclk;		/* PLL reference clock  */
 	struct clk *cfgclk;		/* DPHY configure clock */
 	struct clk *pclk;		/* APB slave bus clock  */
+	struct clk *prefclk;
+	struct clk *pcfgclk;
 };
 
 #define dw_fill_range(r, f, v, cl, ch, dl, dh) {	\
@@ -444,7 +446,7 @@ static int dw_dphy_get_pll_cfg(struct dw_dphy *dphy,
 	unsigned long fin, fout;
 	const struct dw_pll_range *range;
 
-	fin = DIV_ROUND_UP_ULL(clk_get_rate(dphy->refclk), 1000);
+	fin = DIV_ROUND_UP_ULL(clk_get_rate(dphy->prefclk), 1000);
 	if (fin < FCLKIN_FREQ_MIN || fin > FCLKIN_FREQ_MAX)
 		return -EINVAL;
 
@@ -566,7 +568,7 @@ static int dw_dphy_configure(struct phy *phy, union phy_configure_opts *opts)
 	 * cfgclkfreqrange[5:0] = round[(Fcfg_clk(MHz)-17)*4]
 	 *
 	 */
-	cfgclk_freq = DIV_ROUND_UP_ULL(clk_get_rate(dphy->cfgclk), 1000);
+	cfgclk_freq = DIV_ROUND_UP_ULL(clk_get_rate(dphy->pcfgclk), 1000);
 	if (cfgclk_freq < CFGCLK_FREQ_MIN || cfgclk_freq > CFGCLK_FREQ_MAX)
 		return -EINVAL;
 	cfgclkfreqrange = FIELD_PREP(MIPIDSI_CFGCLKFREQRANGE,
@@ -666,7 +668,17 @@ static int dw_dphy_probe(struct platform_device *pdev)
 	if (IS_ERR(dphy->pclk))
 		return PTR_ERR(dphy->pclk);
 
+	dphy->prefclk = devm_clk_get(dev, "prefclk");
+	if (IS_ERR(dphy->prefclk))
+		return PTR_ERR(dphy->prefclk);
+
+	dphy->pcfgclk = devm_clk_get(dev, "pcfgclk");
+	if (IS_ERR(dphy->pcfgclk))
+		return PTR_ERR(dphy->pcfgclk);
+
 	platform_set_drvdata(pdev, dphy);
+
+	pm_runtime_enable(dev);
 
 	dphy->phy = devm_phy_create(dev, np, &dw_dphy_phy_ops);
 	if (IS_ERR(dphy->phy))
@@ -680,6 +692,8 @@ static int dw_dphy_probe(struct platform_device *pdev)
 
 static int dw_dphy_remove(struct platform_device *pdev)
 {
+	pm_runtime_disable(&pdev->dev);
+
 	return 0;
 }
 
@@ -688,12 +702,58 @@ static const struct of_device_id dw_dphy_of_match[] = {
 };
 MODULE_DEVICE_TABLE(of, dw_dphy_of_match);
 
+#ifdef CONFIG_PM
+static int dw_dphy_runtime_suspend(struct device *dev)
+{
+	struct dw_dphy *dphy = dev_get_drvdata(dev);
+
+	clk_disable_unprepare(dphy->refclk);
+	clk_disable_unprepare(dphy->cfgclk);
+	clk_disable_unprepare(dphy->pclk);
+
+	return 0;
+}
+
+static int dw_dphy_runtime_resume(struct device *dev)
+{
+	int ret;
+	struct dw_dphy *dphy = dev_get_drvdata(dev);
+
+	ret = clk_prepare_enable(dphy->pclk);
+	if (ret) {
+		dev_err(dev, "failed to prepare/enable pclk\n");
+		return ret;
+	}
+
+	ret = clk_prepare_enable(dphy->cfgclk);
+	if (ret) {
+		dev_err(dev, "failed to prepare/enable cfgclk\n");
+		return ret;
+	}
+
+	ret = clk_prepare_enable(dphy->refclk);
+	if (ret) {
+		dev_err(dev, "failed to prepare/enable refclk\n");
+		return ret;
+	}
+
+	return 0;
+}
+#endif
+
+static const struct dev_pm_ops dw_dphy_pm_ops = {
+    SET_LATE_SYSTEM_SLEEP_PM_OPS(pm_runtime_force_suspend,
+				 pm_runtime_force_resume)
+    SET_RUNTIME_PM_OPS(dw_dphy_runtime_suspend, dw_dphy_runtime_resume, NULL)
+};
+
 static struct platform_driver dw_dphy_driver = {
 	.probe	= dw_dphy_probe,
 	.remove	= dw_dphy_remove,
 	.driver	= {
 		.name = "dw-mipi-dphy",
 		.of_match_table = dw_dphy_of_match,
+		.pm = &dw_dphy_pm_ops,
 	},
 };
 module_platform_driver(dw_dphy_driver);
@@ -701,4 +761,3 @@ module_platform_driver(dw_dphy_driver);
 MODULE_AUTHOR("You Xiao <youxiao.fc@linux.alibaba.com>");
 MODULE_DESCRIPTION("Synopsys DesignWare MIPI DPHY driver");
 MODULE_LICENSE("GPL");
-
