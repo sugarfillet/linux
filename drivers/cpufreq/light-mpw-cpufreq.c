@@ -55,7 +55,8 @@ static u32 soc_opp_count = 0;
 static int light_set_target(struct cpufreq_policy *policy, unsigned int index)
 {
 	struct dev_pm_opp *opp;
-	unsigned long freq_hz, volt, volt_old;
+	unsigned long freq_hz;
+	int volt, volt_old;
 	unsigned int old_freq, new_freq;
 	int ret;
 	u32 val;
@@ -74,10 +75,30 @@ static int light_set_target(struct cpufreq_policy *policy, unsigned int index)
 	dev_pm_opp_put(opp);
 
 	volt_old = regulator_get_voltage(dvdd_cpu_reg);
+	if (volt_old < 0) {
+		dev_err(cpu_dev, "failed to get cpu voltage\n");
+		return volt_old;
+	}
 
-	dev_dbg(cpu_dev, "%u MHz, %ld mV --> %u MHz, %ld mV\n",
+	dev_dbg(cpu_dev, "%u MHz, %d mV --> %u MHz, %d mV\n",
 		old_freq / 1000, volt_old / 1000,
 		new_freq / 1000, volt / 1000);
+
+	/* change AXI bus clock ratio to match: BUS_CLK = CPU_CCLK/ratio <= 750MHz */
+	val = readl(ap_sys_reg);
+	if (new_freq > LIGHT_CPUFREQ_THRE) {
+		val &= ~LIGHT_C910_BUS_CLK_RATIO_MASK;
+		val |= LIGHT_C910_BUS_CLK_DIV_RATIO_3;
+	} else {
+		val &= ~LIGHT_C910_BUS_CLK_RATIO_MASK;
+		val |= LIGHT_C910_BUS_CLK_DIV_RATIO_2;
+	}
+	writel(val, ap_sys_reg);
+	val &= ~LIGHT_C910_BUS_CLK_SYNC;
+	writel(val, ap_sys_reg);
+	udelay(1);
+	val |= LIGHT_C910_BUS_CLK_SYNC;
+	writel(val, ap_sys_reg);
 
 	/* scaling up?  scale voltage before frequency */
 	if (new_freq > old_freq && !light_dvfs_sv) {
@@ -98,7 +119,6 @@ static int light_set_target(struct cpufreq_policy *policy, unsigned int index)
 	    __clk_get_name(clks[LIGHT_C910_CCLK_I0].clk))) {
 		clk_set_rate(clks[LIGHT_CPU_PLL1_FOUTPOSTDIV].clk, new_freq * 1000);
 		ret = clk_set_parent(clks[LIGHT_C910_CCLK].clk, clks[LIGHT_CPU_PLL1_FOUTPOSTDIV].clk);
-		clk_set_rate(clks[LIGHT_CPU_PLL1_FOUTPOSTDIV].clk, new_freq * 1000);
 	} else {
 		clk_set_rate(clks[LIGHT_CPU_PLL0_FOUTPOSTDIV].clk, new_freq * 1000);
 		ret  = clk_set_parent(clks[LIGHT_C910_CCLK].clk, clks[LIGHT_C910_CCLK_I0].clk);
@@ -112,7 +132,7 @@ static int light_set_target(struct cpufreq_policy *policy, unsigned int index)
 		dev_err(cpu_dev, "failed to set clock rate: %d\n", ret);
 		ret1 = regulator_set_voltage_tol(dvdd_cpu_reg, volt_old, 0);
 		if (ret1)
-			dev_warn(cpu_dev, "failed to restore dvdd_cpu voltage: %d\n", ret1);
+			dev_err(cpu_dev, "failed to restore dvdd_cpu voltage: %d\n", ret1);
 		return ret;
 	}
 
@@ -120,27 +140,11 @@ static int light_set_target(struct cpufreq_policy *policy, unsigned int index)
 	if (new_freq < old_freq && !light_dvfs_sv) {
 		ret = regulator_set_voltage_tol(dvddm_cpu_reg, light_dvddm_volt[index], 0);
 		if (ret)
-			dev_warn(cpu_dev, "failed to scale dvddm down: %d\n", ret);
+			dev_err(cpu_dev, "failed to scale dvddm down: %d\n", ret);
 		ret = regulator_set_voltage_tol(dvdd_cpu_reg, volt, 0);
 		if (ret)
-			dev_warn(cpu_dev, "failed to scale dvdd_cpu down: %d\n", ret);
+			dev_err(cpu_dev, "failed to scale dvdd_cpu down: %d\n", ret);
 	}
-
-	/* change AXI bus clock ratio to match: BUS_CLK = CPU_CCLK/ratio <= 750MHz */
-	val = readl(ap_sys_reg);
-	if (new_freq > LIGHT_CPUFREQ_THRE) {
-		val &= ~LIGHT_C910_BUS_CLK_RATIO_MASK;
-		val |= LIGHT_C910_BUS_CLK_DIV_RATIO_3;
-	} else {
-		val &= ~LIGHT_C910_BUS_CLK_RATIO_MASK;
-		val |= LIGHT_C910_BUS_CLK_DIV_RATIO_2;
-	}
-	writel(val, ap_sys_reg);
-	val &= ~LIGHT_C910_BUS_CLK_SYNC;
-	writel(val, ap_sys_reg);
-	udelay(1);
-	val |= LIGHT_C910_BUS_CLK_SYNC;
-	writel(val, ap_sys_reg);
 
 	return 0;
 }
@@ -305,6 +309,9 @@ soc_opp_out:
 	register_pm_notifier(&light_cpufreq_pm_notifier);
 
 	of_node_put(np);
+
+	dev_info(cpu_dev, "finish to register cpufreq driver\n");
+
 	return 0;
 
 free_freq_table:
