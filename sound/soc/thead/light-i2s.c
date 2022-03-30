@@ -26,11 +26,17 @@
 #include <sound/dmaengine_pcm.h>
 
 #define IIS_SRC_CLK  294912000
+#define AUDIO_IIS_SRC_CLK  49152000
 #define IIS_MCLK_SEL 256
 #define HDMI_DIV_VALUE    2
 #define DIV_DEFAULT	  1
 #define MONO_SOURCE	  1
 #define STEREO_CHANNEL    2
+
+#define AP_I2S		"ap_i2s"
+#define AUDIO_I2S0	"i2s0"
+#define AUDIO_I2S1	"i2s1"
+#define AUDIO_I2S3	"i2s3"
 
 #define LIGHT_I2S_DMABUF_SIZE     (64 * 1024)
 
@@ -42,7 +48,10 @@ static void light_i2s_set_div_sclk(struct light_i2s_priv *chip, u32 sample_rate,
 	u32 div;
 	u32 div0;
 
-	div = IIS_SRC_CLK / IIS_MCLK_SEL;
+	if (!strcmp(chip->name, AP_I2S))
+		div = IIS_SRC_CLK / IIS_MCLK_SEL;
+	else
+		div = AUDIO_IIS_SRC_CLK / IIS_MCLK_SEL;
 	div0 = (div + div % sample_rate) / sample_rate / div_val;
 
 	writel(div0, chip->regs + I2S_DIV0_LEVEL);
@@ -273,6 +282,7 @@ static int light_i2s_dai_hw_params(struct snd_pcm_substream *substream, struct s
 		funcmode |= FUNCMODE_RMODE_WEN;
 		funcmode |= FUNCMODE_CH0_ENABLE;
 		funcmode |= FUNCMODE_CH1_ENABLE;
+		funcmode |= FUNCMODE_CH2_ENABLE;
 		funcmode |= FUNCMODE_TMODE_WEN;
 		funcmode &= ~FUNCMODE_TMODE;
 		funcmode &= ~FUNCMODE_RMODE;
@@ -540,6 +550,11 @@ static int light_audio_i2s_probe(struct platform_device *pdev)
 			printk("mode is not i2s-master");
 	}
 
+	sprop = of_get_property(np, "light,sel", NULL);
+	if (sprop) {
+		strcpy(i2s_priv->name, sprop);
+	}
+
 	iprop = of_get_property(np, "light,dma_maxburst", NULL);
 	if (iprop)
 		i2s_priv->dma_maxburst = be32_to_cpup(iprop);
@@ -587,8 +602,17 @@ static int light_audio_i2s_probe(struct platform_device *pdev)
 	i2s_priv->dma_params_rx.addr_width = DMA_SLAVE_BUSWIDTH_4_BYTES;
 	i2s_priv->dma_params_tx.maxburst = i2s_priv->dma_maxburst;
 	i2s_priv->dma_params_rx.maxburst = i2s_priv->dma_maxburst;
-	i2s_priv->dma_params_tx.addr = res->start + I2S_DR;
-	i2s_priv->dma_params_rx.addr = res->start + I2S_DR1;
+
+	if (!strcmp(i2s_priv->name, AP_I2S)) {
+		i2s_priv->dma_params_tx.addr = res->start + I2S_DR;
+		i2s_priv->dma_params_rx.addr = res->start + I2S_DR1;
+	} else if (!strcmp(i2s_priv->name, AUDIO_I2S0) || !strcmp(i2s_priv->name, AUDIO_I2S1)) {
+		i2s_priv->dma_params_tx.addr = res->start + I2S_DR;
+		i2s_priv->dma_params_rx.addr = res->start + I2S_DR;
+	} else if (!strcmp(i2s_priv->name, AUDIO_I2S3)) {
+		i2s_priv->dma_params_tx.addr = res->start + I2S_DR;
+		i2s_priv->dma_params_rx.addr = res->start + I2S_DR2;
+	}
 
 	light_pcm_probe(pdev, i2s_priv);
 
