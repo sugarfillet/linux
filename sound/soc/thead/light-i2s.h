@@ -470,6 +470,7 @@ struct light_i2s_priv {
 	u32 dma_maxburst;
 
         struct device *dev;
+        char name[16];
         int chan_num:16;
         unsigned int clk_master:1;
 };
