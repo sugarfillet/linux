@@ -198,13 +198,11 @@ static int es7210_read(u8 reg, u8 *rt_value, struct i2c_client *client)
 
         ret = i2c_master_send(client, read_cmd, cmd_len);
         if (ret != cmd_len) {
-                pr_err("es7210_read error1\n");
                 return -1;
         }
 
         ret = i2c_master_recv(client, rt_value, 1);
         if (ret != 1) {
-                pr_err("es7210_read error2, ret = %d.\n", ret);
                 return -1;
         }
 
@@ -220,7 +218,6 @@ static int es7210_write(u8 reg, unsigned char value, struct i2c_client *client)
 
         ret = i2c_master_send(client, write_cmd, 2);
         if (ret != 2) {
-                pr_err("es7210_write error->[REG-0x%02x,val-0x%02x]\n", reg, value);
                 return -1;
         }
 
@@ -881,6 +878,7 @@ static int es7210_resume(struct snd_soc_component *component)
 static int es7210_probe(struct snd_soc_component *component)
 {
         struct es7210_priv *es7210 = snd_soc_component_get_drvdata(component);
+        u8 val, val1;
         int ret = 0;
         resume_es7210 = es7210;
 
@@ -891,7 +889,18 @@ static int es7210_probe(struct snd_soc_component *component)
 
         tron_codec1[es7210_codec_num++] = component;
         INIT_DELAYED_WORK(&es7210->pcm_pop_work, pcm_pop_work_events);
+
+	/* es7210 chip id */
+	ret = es7210_read(0x3D, &val, i2c_clt1[0]);
+	ret = es7210_read(0x3E, &val1, i2c_clt1[0]);
+	if (ret < 0) {
+		pr_err("%s: read chipid failed %d\n", __func__, ret);
+		goto exit_i2c_check_id_failed;
+	}
+
         es7210_tdm_init_codec(es7210->tdm_mode);
+
+exit_i2c_check_id_failed:
         return 0;
 }
 

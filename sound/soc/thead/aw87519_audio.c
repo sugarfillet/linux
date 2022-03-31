@@ -68,8 +68,7 @@ static int aw87519_i2c_write(struct aw87519 *aw87519,
 					reg_addr,
 					reg_data);
 		if (ret < 0) {
-			pr_err("%s: i2c_write cnt=%d error=%d\n",
-			__func__, cnt, ret);
+			return -1;
 		} else {
 			break;
 		}
@@ -89,8 +88,7 @@ static int aw87519_i2c_read(struct aw87519 *aw87519,
 	while (cnt < AW_I2C_RETRIES) {
 		ret = i2c_smbus_read_byte_data(aw87519->i2c_client, reg_addr);
 		if (ret < 0) {
-			pr_err("%s: i2c_read cnt=%d error=%d\n",
-				__func__, cnt, ret);
+			return -1;
 		} else {
 			 *reg_data = ret;
 			 break;
@@ -107,15 +105,11 @@ static int aw87519_i2c_read(struct aw87519 *aw87519,
 ***************************************************************************/
 unsigned int aw87519_hw_on(struct aw87519 *aw87519)
 {
-	pr_info("%s enter\n", __func__);
-
 	return 0;
 }
 
 unsigned int aw87519_hw_off(struct aw87519 *aw87519)
 {
-	pr_info("%s enter\n", __func__);
-
 	return 0;
 }
 
@@ -528,7 +522,6 @@ int aw87519_read_chipid(struct aw87519 *aw87519)
 		if (reg_val == AW87519_CHIPID) {
 			return 0;
 		}
-		pr_info("%s: aw87519 chipid=0x%x error\n", __func__, reg_val);
 		cnt++;
 		usleep_range(2000, 2500);
 	}
@@ -580,7 +573,7 @@ static int aw87519_i2c_probe(struct i2c_client *client,
 	/* aw87519 chip id */
 	ret = aw87519_read_chipid(aw87519);
 	if (ret < 0) {
-		dev_err(&client->dev, "%s: aw87519_read_chipid failed ret=%d\n",
+		dev_err(&client->dev, "%s: aw87519_read_chipid failed %d\n",
 			__func__, ret);
 		goto exit_i2c_check_id_failed;
 	}
