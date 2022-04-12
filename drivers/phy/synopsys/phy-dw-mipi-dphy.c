@@ -397,9 +397,13 @@ static int dw_dphy_init(struct phy *phy)
 {
 	struct dw_dphy *dphy = phy_get_drvdata(phy);
 
+	pm_runtime_get_sync(dphy->dev);
+
 	/* reset testclr */
 	dw_dphy_config_testclr(dphy, 1);
 	dw_dphy_config_testclr(dphy, 0);
+
+	pm_runtime_put(dphy->dev);
 
 	return 0;
 }
@@ -412,6 +416,8 @@ static int dw_dphy_exit(struct phy *phy)
 static int dw_dphy_power_on(struct phy *phy)
 {
 	struct dw_dphy *dphy = phy_get_drvdata(phy);
+
+	pm_runtime_get_sync(dphy->dev);
 
 	dw_dphy_config_enableclk(dphy, 1);
 
@@ -431,6 +437,8 @@ static int dw_dphy_power_off(struct phy *phy)
 	dw_dphy_config_enableclk(dphy, 0);
 
 	dw_dphy_config_shutdownz(dphy, 0);
+
+	pm_runtime_put(dphy->dev);
 
 	return 0;
 }
@@ -678,6 +686,7 @@ static int dw_dphy_probe(struct platform_device *pdev)
 
 	platform_set_drvdata(pdev, dphy);
 
+	pm_suspend_ignore_children(dev, true);
 	pm_runtime_enable(dev);
 
 	dphy->phy = devm_phy_create(dev, np, &dw_dphy_phy_ops);
