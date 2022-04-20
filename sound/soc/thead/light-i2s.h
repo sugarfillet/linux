@@ -457,22 +457,24 @@
 #define I2S_MAX_FIFO                                (0x20U)
 
 struct light_i2s_priv {
-        void __iomem *base;
-        phys_addr_t phys;
+	void __iomem *base;
+	phys_addr_t phys;
 
-        void __iomem            *regs;
+	void __iomem            *regs;
 	struct regmap *regmap;
-        struct clk *clk;
-        struct snd_dmaengine_dai_dma_data dma_params_tx;
-        struct snd_dmaengine_dai_dma_data dma_params_rx;
-        u32 fmt;
-        unsigned int dai_fmt;
+	struct regmap *audio_pin_regmap;
+	struct clk *clk;
+	struct snd_dmaengine_dai_dma_data dma_params_tx;
+	struct snd_dmaengine_dai_dma_data dma_params_rx;
+	u32 fmt;
+	unsigned int dai_fmt;
 	u32 dma_maxburst;
+	unsigned int cfg_off;
 
-        struct device *dev;
-        char name[16];
-        int chan_num:16;
-        unsigned int clk_master:1;
+	struct device *dev;
+	char name[16];
+	int chan_num:16;
+	unsigned int clk_master:1;
 };
 
 #endif /* _LIGHT_I2S_H */
