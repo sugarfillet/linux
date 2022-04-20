@@ -24,6 +24,8 @@
 #include <sound/pcm.h>
 #include <sound/initval.h>
 #include <sound/dmaengine_pcm.h>
+#include <linux/mfd/syscon.h>
+#include <dt-bindings/pinctrl/light-fm-aon-pinctrl.h>
 
 #define IIS_SRC_CLK  294912000
 #define AUDIO_IIS_SRC_CLK  49152000
@@ -42,6 +44,8 @@
 
 #define LIGHT_RATES SNDRV_PCM_RATE_8000_384000
 #define LIGHT_FMTS (SNDRV_PCM_FMTBIT_S32_LE | SNDRV_PCM_FMTBIT_S24_LE | SNDRV_PCM_FMTBIT_S16_LE | SNDRV_PCM_FMTBIT_S8)
+
+#define LIGHT_AUDIO_PAD_CONFIG(idx)   (i2s_priv->cfg_off + ((idx-25) >> 1) * 4)
 
 static void light_i2s_set_div_sclk(struct light_i2s_priv *chip, u32 sample_rate, unsigned int div_val)
 {
@@ -490,6 +494,41 @@ static const struct regmap_config light_i2s_regmap_config = {
         .cache_type = REGCACHE_FLAT,
 };
 
+static int light_audio_pinconf_set(struct device *dev, unsigned int pin_id, unsigned int val)
+{
+	struct light_i2s_priv *i2s_priv = dev_get_drvdata(dev);
+	unsigned int shift;
+	unsigned int mask = 0;
+
+	i2s_priv->cfg_off = 0xC;
+
+	shift = (((pin_id-25) % 2) << 4);
+	mask |= (0xFFFF << shift);
+	val = (val << shift);
+
+	return regmap_update_bits(i2s_priv->audio_pin_regmap,
+				LIGHT_AUDIO_PAD_CONFIG(pin_id),mask, val);
+}
+
+static int light_audio_pinctrl(struct device *dev)
+{
+	struct light_i2s_priv *i2s_priv = dev_get_drvdata(dev);
+
+	if (!strcmp(i2s_priv->name, AUDIO_I2S0)) {
+		light_audio_pinconf_set(i2s_priv->dev, FM_AUDIO_PA9, 0x8);
+		light_audio_pinconf_set(i2s_priv->dev, FM_AUDIO_PA10, 0x8);
+		light_audio_pinconf_set(i2s_priv->dev, FM_AUDIO_PA11, 0x8);
+		light_audio_pinconf_set(i2s_priv->dev, FM_AUDIO_PA12, 0x8);
+	} else if (!strcmp(i2s_priv->name, AUDIO_I2S1)) {
+		light_audio_pinconf_set(i2s_priv->dev, FM_AUDIO_PA13, 0x8);
+		light_audio_pinconf_set(i2s_priv->dev, FM_AUDIO_PA14, 0x8);
+		light_audio_pinconf_set(i2s_priv->dev, FM_AUDIO_PA15, 0x8);
+		light_audio_pinconf_set(i2s_priv->dev, FM_AUDIO_PA17, 0x8);
+	}
+
+	return 0;
+}
+
 static int light_i2s_runtime_suspend(struct device *dev)
 {
         struct light_i2s_priv *i2s_priv = dev_get_drvdata(dev);
@@ -575,6 +614,14 @@ static int light_audio_i2s_probe(struct platform_device *pdev)
                         "Failed to initialise managed register map\n");
                 return PTR_ERR(i2s_priv->regmap);
         }
+
+	if (!strcmp(i2s_priv->name, AUDIO_I2S0) || !strcmp(i2s_priv->name, AUDIO_I2S1)) {
+		i2s_priv->audio_pin_regmap = syscon_regmap_lookup_by_phandle(np, "audio-pin-regmap");
+		if (IS_ERR(i2s_priv->audio_pin_regmap)) {
+			dev_err(&pdev->dev, "cannot find regmap for audio system register\n");
+		} else
+			light_audio_pinctrl(&pdev->dev);
+	}
 
 	pm_runtime_enable(&pdev->dev);
         if (!pm_runtime_enabled(&pdev->dev)) {

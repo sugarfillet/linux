@@ -245,7 +245,6 @@ static int es8156_set_bias_level(struct snd_soc_component *codec,
 {
 	int ret;  
 	struct es8156_priv *priv = snd_soc_component_get_drvdata(codec);
-	printk("%s\n", __func__); 
 
 	switch (level) 
 	{
