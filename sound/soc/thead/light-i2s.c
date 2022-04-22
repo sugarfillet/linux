@@ -28,7 +28,8 @@
 #include <dt-bindings/pinctrl/light-fm-aon-pinctrl.h>
 
 #define IIS_SRC_CLK  294912000
-#define AUDIO_IIS_SRC_CLK  49152000
+#define AUDIO_IIS_SRC0_CLK  49152000
+#define AUDIO_IIS_SRC1_CLK  135475200
 #define IIS_MCLK_SEL 256
 #define HDMI_DIV_VALUE    2
 #define DIV_DEFAULT	  1
@@ -47,17 +48,53 @@
 
 #define LIGHT_AUDIO_PAD_CONFIG(idx)   (i2s_priv->cfg_off + ((idx-25) >> 1) * 4)
 
+static u32 light_special_sample_rates[] = { 11025, 22050, 44100, 88200 };
+
+static int light_audio_cpr_set(struct light_i2s_priv *chip, unsigned int cpr_off,
+                               unsigned int mask, unsigned int val)
+{
+       return regmap_update_bits(chip->audio_cpr_regmap,
+                               cpr_off, mask, val);
+}
+
 static void light_i2s_set_div_sclk(struct light_i2s_priv *chip, u32 sample_rate, unsigned int div_val)
 {
 	u32 div;
 	u32 div0;
+	int i;
+	u32 i2s_src_clk = 0;
 
 	if (!strcmp(chip->name, AP_I2S))
 		div = IIS_SRC_CLK / IIS_MCLK_SEL;
-	else
-		div = AUDIO_IIS_SRC_CLK / IIS_MCLK_SEL;
-	div0 = (div + div % sample_rate) / sample_rate / div_val;
+	else {
+		for (i = 0; i < ARRAY_SIZE(light_special_sample_rates); i++) {
+			if (light_special_sample_rates[i] == sample_rate) {
+				i2s_src_clk = 1;
+				break;
+			}
+		}
+		if (!strcmp(chip->name, AUDIO_I2S0)) {
+			if (!i2s_src_clk) {
+				light_audio_cpr_set(chip, CPR_PERI_CLK_SEL_REG, CPR_I2S0_SRC_SEL_MSK, CPR_I2S0_SRC_SEL(0));
+				div = AUDIO_IIS_SRC0_CLK / IIS_MCLK_SEL;
+			} else {
+				light_audio_cpr_set(chip, CPR_PERI_CLK_SEL_REG, CPR_I2S0_SRC_SEL_MSK, CPR_I2S0_SRC_SEL(2));
+				div = AUDIO_IIS_SRC1_CLK / IIS_MCLK_SEL;
+			}
+		} else if (!strcmp(chip->name, AUDIO_I2S1)) {
+			if (!i2s_src_clk) {
+				light_audio_cpr_set(chip, CPR_PERI_CLK_SEL_REG, CPR_I2S1_SRC_SEL_MSK, CPR_I2S1_SRC_SEL(0));
+				div = AUDIO_IIS_SRC0_CLK / IIS_MCLK_SEL;
+			} else {
+				light_audio_cpr_set(chip, CPR_PERI_CLK_SEL_REG, CPR_I2S1_SRC_SEL_MSK, CPR_I2S1_SRC_SEL(2));
+				div = AUDIO_IIS_SRC1_CLK / IIS_MCLK_SEL;
+			}
+		} else if (!strcmp(chip->name, AUDIO_I2S3)) {
+				div = AUDIO_IIS_SRC0_CLK / IIS_MCLK_SEL;
+		}
+	}
 
+	div0 = (div + div % sample_rate) / sample_rate / div_val;
 	writel(div0, chip->regs + I2S_DIV0_LEVEL);
 }
 
@@ -621,6 +658,12 @@ static int light_audio_i2s_probe(struct platform_device *pdev)
 			dev_err(&pdev->dev, "cannot find regmap for audio system register\n");
 		} else
 			light_audio_pinctrl(&pdev->dev);
+
+		i2s_priv->audio_cpr_regmap = syscon_regmap_lookup_by_phandle(np, "audio-cpr-regmap");
+		if (IS_ERR(i2s_priv->audio_cpr_regmap)) {
+			dev_err(&pdev->dev, "cannot find regmap for audio cpr register\n");
+		} else
+			light_audio_cpr_set(i2s_priv, CPR_PERI_DIV_SEL_REG, CPR_AUDIO_DIV1_SEL_MSK, CPR_AUDIO_DIV1_SEL(5));
 	}
 
 	pm_runtime_enable(&pdev->dev);
