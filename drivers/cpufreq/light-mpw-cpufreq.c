@@ -60,6 +60,7 @@ static int light_set_target(struct cpufreq_policy *policy, unsigned int index)
 	unsigned int old_freq, new_freq;
 	int ret;
 	u32 val;
+	u32 re_modify_bus_freq = 0;
 
 	new_freq = freq_table[index].frequency;
 	freq_hz = new_freq * 1000;
@@ -91,14 +92,21 @@ static int light_set_target(struct cpufreq_policy *policy, unsigned int index)
 		val |= LIGHT_C910_BUS_CLK_DIV_RATIO_3;
 	} else {
 		val &= ~LIGHT_C910_BUS_CLK_RATIO_MASK;
-		val |= LIGHT_C910_BUS_CLK_DIV_RATIO_2;
+
+		if (old_freq > LIGHT_CPUFREQ_THRE) {
+			re_modify_bus_freq = 1;
+			val |= LIGHT_C910_BUS_CLK_DIV_RATIO_3;
+		}else
+			val |= LIGHT_C910_BUS_CLK_DIV_RATIO_2;
 	}
+
 	writel(val, ap_sys_reg);
 	val &= ~LIGHT_C910_BUS_CLK_SYNC;
 	writel(val, ap_sys_reg);
 	udelay(1);
 	val |= LIGHT_C910_BUS_CLK_SYNC;
 	writel(val, ap_sys_reg);
+	udelay(1);
 
 	/* scaling up?  scale voltage before frequency */
 	if (new_freq > old_freq && !light_dvfs_sv) {
@@ -124,6 +132,9 @@ static int light_set_target(struct cpufreq_policy *policy, unsigned int index)
 		ret  = clk_set_parent(clks[LIGHT_C910_CCLK].clk, clks[LIGHT_C910_CCLK_I0].clk);
 	}
 
+	/*add delay for clk-switch*/
+	udelay(1);
+
 	/* Ensure the c910_cclk clock divider is what we expect */
 	ret = clk_set_rate(clks[LIGHT_C910_CCLK].clk, new_freq * 1000);
 	if (ret) {
@@ -144,6 +155,20 @@ static int light_set_target(struct cpufreq_policy *policy, unsigned int index)
 		ret = regulator_set_voltage_tol(dvdd_cpu_reg, volt, 0);
 		if (ret)
 			dev_err(cpu_dev, "failed to scale dvdd_cpu down: %d\n", ret);
+	}
+
+	val = readl(ap_sys_reg);
+	if (re_modify_bus_freq) {
+		val &= ~LIGHT_C910_BUS_CLK_RATIO_MASK;
+		val |= LIGHT_C910_BUS_CLK_DIV_RATIO_2;
+
+		writel(val, ap_sys_reg);
+		val &= ~LIGHT_C910_BUS_CLK_SYNC;
+		writel(val, ap_sys_reg);
+		udelay(1);
+		val |= LIGHT_C910_BUS_CLK_SYNC;
+		writel(val, ap_sys_reg);
+		udelay(1);
 	}
 
 	return 0;
