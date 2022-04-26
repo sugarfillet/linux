@@ -102,6 +102,14 @@ static void pwm_light_disable(struct pwm_chip *chip, struct pwm_device *pwm)
 {
 	struct pwm_light_chip *plc = to_pwm_light_chip(chip);
 	u32 value;
+	int ret;
+
+	ret = pm_runtime_get_sync(chip->dev);
+	if (ret < 0) {
+		dev_err(chip->dev, "failed to clock on the pwm device(%d)\n", ret);
+		pm_runtime_put_noidle(chip->dev);
+		return;
+	}
 
 	value = readl(plc->mmio_base + LIGHT_PWM_CTRL(pwm->hwpwm));
 	value &= ~PWM_START;
