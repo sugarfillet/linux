@@ -3448,6 +3448,9 @@ struct dw_hdmi *dw_hdmi_probe(struct platform_device *pdev,
 		hdmi->cec = platform_device_register_full(&pdevinfo);
 	}
 
+	clk_prepare_enable(hdmi->iahb_clk);
+	clk_prepare_enable(hdmi->isfr_clk);
+
 	drm_bridge_add(&hdmi->bridge);
 
 	return hdmi;
@@ -3473,8 +3476,6 @@ void dw_hdmi_remove(struct dw_hdmi *hdmi)
 
 	clk_disable_unprepare(hdmi->iahb_clk);
 	clk_disable_unprepare(hdmi->isfr_clk);
-	if (hdmi->cec_clk)
-		clk_disable_unprepare(hdmi->cec_clk);
 
 	if (hdmi->i2c)
 		i2c_del_adapter(&hdmi->i2c->adap);
@@ -3526,8 +3527,6 @@ int dw_hdmi_runtime_suspend(struct dw_hdmi *hdmi)
 	clk_disable_unprepare(hdmi->i2s_clk);
 	clk_disable_unprepare(hdmi->pix_clk);
 	clk_disable_unprepare(hdmi->cec_clk);
-	clk_disable_unprepare(hdmi->isfr_clk);
-	clk_disable_unprepare(hdmi->iahb_clk);
 
 	return 0;
 }
@@ -3535,8 +3534,6 @@ EXPORT_SYMBOL_GPL(dw_hdmi_runtime_suspend);
 
 int dw_hdmi_runtime_resume(struct dw_hdmi *hdmi)
 {
-	clk_prepare_enable(hdmi->iahb_clk);
-	clk_prepare_enable(hdmi->isfr_clk);
 	clk_prepare_enable(hdmi->cec_clk);
 	clk_prepare_enable(hdmi->pix_clk);
 	clk_prepare_enable(hdmi->i2s_clk);
