@@ -223,6 +223,11 @@ static int es8156_pcm_hw_params(struct snd_pcm_substream *substream,
 				struct snd_soc_dai *dai)
 {
 	struct snd_soc_component *codec = dai->component;	
+	struct snd_pcm_runtime *runtime = substream->runtime;
+
+	snd_pcm_hw_constraint_minmax(runtime, SNDRV_PCM_HW_PARAM_PERIOD_BYTES,
+				     4096, UINT_MAX);
+
 	switch (params_format(params)) {
 	case SNDRV_PCM_FORMAT_S16_LE:		
 		snd_soc_component_update_bits(codec, ES8156_DAC_SDP_REG11, 0x70,0x30);

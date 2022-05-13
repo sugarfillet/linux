@@ -105,11 +105,14 @@ static int aw87519_i2c_read(struct aw87519 *aw87519,
 ***************************************************************************/
 unsigned int aw87519_hw_on(struct aw87519 *aw87519)
 {
+	aw87519->hwen_flag = 1;
+	aw87519_i2c_write(aw87519, 0x64, 0x2C);
 	return 0;
 }
 
 unsigned int aw87519_hw_off(struct aw87519 *aw87519)
 {
+	aw87519->hwen_flag = 0;
 	return 0;
 }
 
@@ -591,6 +594,8 @@ static int aw87519_i2c_probe(struct i2c_client *client,
 
 	/* aw87519 hardware off */
 	aw87519_hw_off(aw87519);
+
+	aw87519_audio_speaker();
 
 	return 0;
 
