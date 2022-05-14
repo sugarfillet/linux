@@ -1979,6 +1979,7 @@ static void hdmi_av_composer(struct dw_hdmi *hdmi,
 			 * Source Devices compliant shall set the
 			 * Source Version = 1.
 			 */
+			mdelay(60);
 			drm_scdc_readb(hdmi->ddc, SCDC_SINK_VERSION,
 				       &bytes);
 			drm_scdc_writeb(hdmi->ddc, SCDC_SOURCE_VERSION,
