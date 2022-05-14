@@ -975,6 +975,7 @@ static void hdmi_video_sample(struct dw_hdmi *hdmi)
 	hdmi_writeb(hdmi, 0x0, HDMI_TX_BCBDATA1);
 }
 
+#if 0
 static int is_color_space_conversion(struct dw_hdmi *hdmi)
 {
 	struct hdmi_data_info *hdmi_data = &hdmi->hdmi_data;
@@ -986,6 +987,7 @@ static int is_color_space_conversion(struct dw_hdmi *hdmi)
 	return (is_input_rgb != is_output_rgb) ||
 	       (is_input_rgb && is_output_rgb && hdmi_data->rgb_limited_range);
 }
+#endif
 
 static int is_color_space_decimation(struct dw_hdmi *hdmi)
 {
@@ -1011,12 +1013,14 @@ static int is_color_space_interpolation(struct dw_hdmi *hdmi)
 	return 0;
 }
 
+#if 0
 static bool is_csc_needed(struct dw_hdmi *hdmi)
 {
 	return is_color_space_conversion(hdmi) ||
 	       is_color_space_decimation(hdmi) ||
 	       is_color_space_interpolation(hdmi);
 }
+#endif
 
 static void dw_hdmi_update_csc_coeffs(struct dw_hdmi *hdmi)
 {
