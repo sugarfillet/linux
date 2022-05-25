@@ -3324,6 +3324,9 @@ struct dw_hdmi *dw_hdmi_probe(struct platform_device *pdev,
 		goto err_res;
 	}
 
+	clk_prepare_enable(hdmi->iahb_clk);
+	clk_prepare_enable(hdmi->isfr_clk);
+
 	/* Product and revision IDs */
 	hdmi->version = (hdmi_readb(hdmi, HDMI_DESIGN_ID) << 8)
 		      | (hdmi_readb(hdmi, HDMI_REVISION_ID) << 0);
@@ -3452,9 +3455,6 @@ struct dw_hdmi *dw_hdmi_probe(struct platform_device *pdev,
 
 		hdmi->cec = platform_device_register_full(&pdevinfo);
 	}
-
-	clk_prepare_enable(hdmi->iahb_clk);
-	clk_prepare_enable(hdmi->isfr_clk);
 
 	drm_bridge_add(&hdmi->bridge);
 
