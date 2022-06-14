@@ -125,11 +125,17 @@ static int light_set_target(struct cpufreq_policy *policy, unsigned int index)
 
 	if (!strcmp(__clk_get_name(clk_get_parent(clks[LIGHT_C910_CCLK].clk)),
 	    __clk_get_name(clks[LIGHT_C910_CCLK_I0].clk))) {
+		clk_prepare_enable(clks[LIGHT_CPU_PLL1_FOUTPOSTDIV].clk);
 		clk_set_rate(clks[LIGHT_CPU_PLL1_FOUTPOSTDIV].clk, new_freq * 1000);
 		ret = clk_set_parent(clks[LIGHT_C910_CCLK].clk, clks[LIGHT_CPU_PLL1_FOUTPOSTDIV].clk);
+		udelay(1);
+		clk_disable_unprepare(clks[LIGHT_CPU_PLL0_FOUTPOSTDIV].clk);
 	} else {
+		clk_prepare_enable(clks[LIGHT_CPU_PLL0_FOUTPOSTDIV].clk);
 		clk_set_rate(clks[LIGHT_CPU_PLL0_FOUTPOSTDIV].clk, new_freq * 1000);
 		ret  = clk_set_parent(clks[LIGHT_C910_CCLK].clk, clks[LIGHT_C910_CCLK_I0].clk);
+		udelay(1);
+		clk_disable_unprepare(clks[LIGHT_CPU_PLL1_FOUTPOSTDIV].clk);
 	}
 
 	/*add delay for clk-switch*/
