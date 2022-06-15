@@ -130,7 +130,6 @@ END(handle_exception)
 ENTRY(ret_from_exception)
 	REG_L s0, PT_STATUS(sp)
 
-	csrc CSR_STATUS, SR_IE
 #ifdef CONFIG_RISCV_M_MODE
 	/* the MPP value is too large to be used as an immediate arg for addi */
 	li t0, SR_MPP
@@ -139,6 +138,9 @@ ENTRY(ret_from_exception)
 	andi s0, s0, SR_SPP
 #endif
 	bnez s0, 1f
+#ifdef CONFIG_GCC_PLUGIN_STACKLEAK
+	call stackleak_erase
+#endif
 
 	/* Save unwound kernel stack pointer in thread_info */
 	addi s0, sp, PT_SIZE_ON_STACK
@@ -148,8 +150,12 @@ ENTRY(ret_from_exception)
 	 * Save TP into the scratch register , so we can find the kernel data
 	 * structures again.
 	 */
+	csrc CSR_STATUS, SR_IE
 	csrw CSR_SCRATCH, tp
+	j 2f
 1:
+	csrc CSR_STATUS, SR_IE
+2:
 	/*
 	 * The current load reservation is effectively part of the processor's
 	 * state, in the sense that load reservations cannot be shared between
