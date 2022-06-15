@@ -502,11 +502,30 @@ static struct attribute_group aw87519_attribute_group = {
  *****************************************************/
 static int aw87519_parse_dt(struct device *dev, struct device_node *np)
 {
+	aw87519->reset_gpio = of_get_named_gpio(np, "reset-gpio", 0);
+	if (aw87519->reset_gpio >= 0) {
+		dev_err(dev, "%s: reset gpio provided ok\n", __func__);
+	} else {
+		dev_err(dev, "%s: no reset gpio provided failed\n", __func__);
+		return -1;
+	}
+
 	return 0;
 }
 
 int aw87519_hw_reset(struct aw87519 *aw87519)
 {
+	if (aw87519 && gpio_is_valid(aw87519->reset_gpio)) {
+		gpio_set_value_cansleep(aw87519->reset_gpio, 0);
+		usleep_range(2000, 2500);
+		gpio_set_value_cansleep(aw87519->reset_gpio, 1);
+		usleep_range(2000, 2500);
+		aw87519->hwen_flag = 1;
+	} else {
+		aw87519->hwen_flag = 0;
+		dev_err(&aw87519->i2c_client->dev, "%s: failed\n", __func__);
+	}
+
 	return 0;
 }
 
@@ -570,6 +589,16 @@ static int aw87519_i2c_probe(struct i2c_client *client,
 		aw87519->reset_gpio = -1;
 	}
 
+	if (gpio_is_valid(aw87519->reset_gpio)) {
+		ret = devm_gpio_request_one(&client->dev, aw87519->reset_gpio,
+			GPIOF_OUT_INIT_LOW, "aw87519_rst");
+		if (ret) {
+			dev_err(&client->dev, "%s: rst request failed\n",
+				__func__);
+			goto exit_gpio_request_failed;
+		}
+	}
+
 	/* hardware reset */
 	aw87519_hw_reset(aw87519);
 
@@ -600,6 +629,7 @@ static int aw87519_i2c_probe(struct i2c_client *client,
 	return 0;
 
 exit_i2c_check_id_failed:
+exit_gpio_request_failed:
 exit_gpio_get_failed:
 	devm_kfree(&client->dev, aw87519);
 	aw87519 = NULL;
