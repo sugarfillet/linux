@@ -552,11 +552,15 @@ static int light_audio_pinctrl(struct device *dev)
 	struct light_i2s_priv *i2s_priv = dev_get_drvdata(dev);
 
 	if (!strcmp(i2s_priv->name, AUDIO_I2S0)) {
+		light_audio_pinconf_set(i2s_priv->dev, FM_AUDIO_PA6, 0x4);
+		light_audio_pinconf_set(i2s_priv->dev, FM_AUDIO_PA7, 0x4);
 		light_audio_pinconf_set(i2s_priv->dev, FM_AUDIO_PA9, 0x8);
 		light_audio_pinconf_set(i2s_priv->dev, FM_AUDIO_PA10, 0x8);
 		light_audio_pinconf_set(i2s_priv->dev, FM_AUDIO_PA11, 0x8);
 		light_audio_pinconf_set(i2s_priv->dev, FM_AUDIO_PA12, 0x8);
 	} else if (!strcmp(i2s_priv->name, AUDIO_I2S1)) {
+		light_audio_pinconf_set(i2s_priv->dev, FM_AUDIO_PA6, 0x4);
+		light_audio_pinconf_set(i2s_priv->dev, FM_AUDIO_PA7, 0x4);
 		light_audio_pinconf_set(i2s_priv->dev, FM_AUDIO_PA13, 0x8);
 		light_audio_pinconf_set(i2s_priv->dev, FM_AUDIO_PA14, 0x8);
 		light_audio_pinconf_set(i2s_priv->dev, FM_AUDIO_PA15, 0x8);
