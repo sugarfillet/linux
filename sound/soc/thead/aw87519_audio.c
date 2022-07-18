@@ -531,10 +531,12 @@ static int aw87519_parse_dt(struct device *dev, struct device_node *np)
 int aw87519_hw_reset(struct aw87519 *aw87519)
 {
 	if (aw87519 && gpio_is_valid(aw87519->reset_gpio)) {
-		gpio_set_value_cansleep(aw87519->reset_gpio, 0);
-		usleep_range(2000, 2500);
 		gpio_set_value_cansleep(aw87519->reset_gpio, 1);
-		usleep_range(2000, 2500);
+		usleep_range(5000, 5500);
+		gpio_set_value_cansleep(aw87519->reset_gpio, 0);
+		usleep_range(2500, 3000);
+		gpio_set_value_cansleep(aw87519->reset_gpio, 1);
+		usleep_range(5000, 5500);
 		aw87519->hwen_flag = 1;
 	} else {
 		aw87519->hwen_flag = 0;
@@ -560,7 +562,7 @@ int aw87519_read_chipid(struct aw87519 *aw87519)
 			return 0;
 		}
 		cnt++;
-		usleep_range(2000, 2500);
+		usleep_range(2500, 3000);
 	}
 
 	return -EINVAL;
@@ -700,7 +702,7 @@ static void __exit aw87519_pa_exit(void)
 	i2c_del_driver(&aw87519_i2c_driver);
 }
 
-module_init(aw87519_pa_init);
+late_initcall(aw87519_pa_init);
 module_exit(aw87519_pa_exit);
 
 MODULE_DESCRIPTION("AWINIC AW87519 PA driver");
