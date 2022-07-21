@@ -7094,6 +7094,7 @@ static void io_sq_cgrp_migr_work(struct work_struct *work)
 	kfree(info->path);
 }
 
+#ifdef CONFIG_CGROUP_CPUACCT
 static int io_sq_attach_cpu_cgroup(struct task_struct *sqo_thread)
 {
 	struct cgroup_subsys_state *css_owner, *css_sq;
@@ -7150,6 +7151,7 @@ out:
 		kfree(buf);
 	return ret;
 }
+#endif
 
 static int io_sq_thread(void *data)
 {
@@ -10011,7 +10013,9 @@ static int io_uring_create(unsigned entries, struct io_uring_params *p,
 		sqd = *per_cpu_ptr(percpu_sqd, cpu);
 		io_sq_thread_park(sqd);
 		sqd->thread->flags &= ~PF_NO_SETAFFINITY;
+#ifdef CONFIG_CGROUP_CPUACCT
 		ret = io_sq_attach_cpu_cgroup(sqd->thread);
+#endif
 		sqd->thread->flags |= PF_NO_SETAFFINITY;
 		io_sq_thread_unpark(sqd);
 		mutex_unlock(&percpu_sqd_lock);
