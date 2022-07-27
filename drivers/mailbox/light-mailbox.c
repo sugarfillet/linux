@@ -216,9 +216,6 @@ static irqreturn_t light_mbox_isr(int irq, void *p)
 	if (!(sta & BIT(mapbit)))
 		return IRQ_NONE;
 
-	/* clear chan irq bit in STA register */
-	light_mbox_rmw(priv, LIGHT_MBOX_CLR, BIT(mapbit), 0);
-
 	/* rx doorbell */
 	if (cp->type == LIGHT_MBOX_TYPE_DB) {
 		mbox_chan_received_data(cp->chan, NULL);
@@ -258,6 +255,9 @@ static irqreturn_t light_mbox_isr(int irq, void *p)
 		dev_warn_ratelimited(priv->dev, "not expected chan[%d] interrupt\n", cp->idx);
 		return IRQ_NONE;
 	}
+
+	/* clear chan irq bit in STA register */
+	light_mbox_rmw(priv, LIGHT_MBOX_CLR, BIT(mapbit), 0);
 
 	return IRQ_HANDLED;
 }
