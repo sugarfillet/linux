@@ -402,6 +402,10 @@ config VECTOR_0_7
 	  If you don't know what to do here, say Y.
 
 endchoice
+
+config THEAD_ISA
+	bool "T-HEAD extension ISA in AFLAGS with -march=_xtheadc"
+	default n
 endmenu
 
 menu "Kernel features"
