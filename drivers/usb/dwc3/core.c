@@ -776,6 +776,8 @@ static void dwc3_core_setup_global_control(struct dwc3 *dwc)
 				dwc->dr_mode == USB_DR_MODE_OTG) &&
 				DWC3_VER_IS_WITHIN(DWC3, 210A, 250A))
 			reg |= DWC3_GCTL_DSBLCLKGTNG | DWC3_GCTL_SOFITPSYNC;
+		else if (dwc->sofitpsync)
+			reg |= DWC3_GCTL_SOFITPSYNC;
 		else
 			reg &= ~DWC3_GCTL_DSBLCLKGTNG;
 		break;
@@ -1384,6 +1386,9 @@ static void dwc3_get_properties(struct dwc3 *dwc)
 
 	dwc->dis_split_quirk = device_property_read_bool(dev,
 				"snps,dis-split-quirk");
+
+	dwc->sofitpsync = device_property_read_bool(dev,
+				"snps,usb_sofitpsync");
 
 	dwc->lpm_nyet_threshold = lpm_nyet_threshold;
 	dwc->tx_de_emphasis = tx_de_emphasis;
