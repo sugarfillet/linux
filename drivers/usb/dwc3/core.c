@@ -40,6 +40,15 @@
 
 #define DWC3_DEFAULT_AUTOSUSPEND_DELAY	5000 /* ms */
 
+static int usb_mode = USB_DR_MODE_UNKNOWN;
+module_param(usb_mode, int, S_IRUGO | S_IWUSR);
+MODULE_PARM_DESC(usb_mode, "USB mode");
+
+static int usb_speed = USB_SPEED_UNKNOWN;
+module_param(usb_speed, int, S_IRUGO | S_IWUSR);
+MODULE_PARM_DESC(usb_speed, "USB speed");
+
+
 /**
  * dwc3_get_dr_mode - Validates and sets dr_mode
  * @dwc: pointer to our context structure
@@ -58,27 +67,12 @@ static int dwc3_get_dr_mode(struct dwc3 *dwc)
 
 	switch (hw_mode) {
 	case DWC3_GHWPARAMS0_MODE_GADGET:
-		if (IS_ENABLED(CONFIG_USB_DWC3_HOST)) {
-			dev_err(dev,
-				"Controller does not support host mode.\n");
-			return -EINVAL;
-		}
 		mode = USB_DR_MODE_PERIPHERAL;
 		break;
 	case DWC3_GHWPARAMS0_MODE_HOST:
-		if (IS_ENABLED(CONFIG_USB_DWC3_GADGET)) {
-			dev_err(dev,
-				"Controller does not support device mode.\n");
-			return -EINVAL;
-		}
 		mode = USB_DR_MODE_HOST;
 		break;
 	default:
-		if (IS_ENABLED(CONFIG_USB_DWC3_HOST))
-			mode = USB_DR_MODE_HOST;
-		else if (IS_ENABLED(CONFIG_USB_DWC3_GADGET))
-			mode = USB_DR_MODE_PERIPHERAL;
-
 		/*
 		 * DWC_usb31 and DWC_usb3 v3.30a and higher do not support OTG
 		 * mode. If the controller supports DRD but the dr_mode is not
@@ -1295,8 +1289,16 @@ static void dwc3_get_properties(struct dwc3 *dwc)
 	 */
 	hird_threshold = 12;
 
-	dwc->maximum_speed = usb_get_maximum_speed(dev);
-	dwc->dr_mode = usb_get_dr_mode(dev);
+	dwc->maximum_speed = usb_speed;
+	dwc->dr_mode = usb_mode;
+
+	if (usb_speed == USB_SPEED_UNKNOWN) {
+		dwc->maximum_speed = usb_get_maximum_speed(dev);
+	}
+	if (usb_mode == USB_DR_MODE_UNKNOWN) {
+		dwc->dr_mode = usb_get_dr_mode(dev);
+	}
+
 	dwc->hsphy_mode = of_usb_get_phy_mode(dev->of_node);
 
 	dwc->sysdev_is_parent = device_property_read_bool(dev,
