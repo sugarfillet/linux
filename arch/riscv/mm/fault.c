@@ -15,6 +15,7 @@
 #include <linux/uaccess.h>
 #include <linux/kprobes.h>
 #include <linux/kfence.h>
+#include <linux/entry-common.h>
 
 #include <asm/ptrace.h>
 #include <asm/tlbflush.h>
@@ -203,7 +204,7 @@ static inline bool access_error(unsigned long cause, struct vm_area_struct *vma)
  * This routine handles page faults.  It determines the address and the
  * problem, and then passes it off to one of the appropriate routines.
  */
-asmlinkage void noinstr do_page_fault(struct pt_regs *regs)
+static void __do_page_fault(struct pt_regs *regs)
 {
 	struct task_struct *tsk;
 	struct vm_area_struct *vma;
@@ -349,5 +350,14 @@ good_area:
 		return;
 	}
 	return;
+}
+
+asmlinkage void noinstr do_page_fault(struct pt_regs *regs)
+{
+	irqentry_state_t state = irqentry_enter(regs);
+
+	__do_page_fault(regs);
+
+	irqentry_exit(regs, state);
 }
 NOKPROBE_SYMBOL(do_page_fault);
