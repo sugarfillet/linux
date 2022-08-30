@@ -17,6 +17,7 @@
 #include <linux/module.h>
 #include <linux/irq.h>
 #include <linux/kexec.h>
+#include <linux/entry-common.h>
 
 #include <asm/asm-prototypes.h>
 #include <asm/bug.h>
@@ -99,7 +100,9 @@ static void do_trap_error(struct pt_regs *regs, int signo, int code,
 #define DO_ERROR_INFO(name, signo, code, str)				\
 asmlinkage __visible __trap_section void name(struct pt_regs *regs)	\
 {									\
+	irqentry_state_t state = irqentry_enter(regs);			\
 	do_trap_error(regs, signo, code, regs->epc, "Oops - " str);	\
+	irqentry_exit(regs, state);					\
 }
 
 DO_ERROR_INFO(do_trap_unknown,
@@ -123,18 +126,22 @@ int handle_misaligned_store(struct pt_regs *regs);
 
 asmlinkage void __trap_section do_trap_load_misaligned(struct pt_regs *regs)
 {
+	irqentry_state_t state = irqentry_enter(regs);
 	if (!handle_misaligned_load(regs))
 		return;
 	do_trap_error(regs, SIGBUS, BUS_ADRALN, regs->epc,
 		      "Oops - load address misaligned");
+	irqentry_exit(regs, state);
 }
 
 asmlinkage void __trap_section do_trap_store_misaligned(struct pt_regs *regs)
 {
+	irqentry_state_t state = irqentry_enter(regs);
 	if (!handle_misaligned_store(regs))
 		return;
 	do_trap_error(regs, SIGBUS, BUS_ADRALN, regs->epc,
 		      "Oops - store (or AMO) address misaligned");
+	irqentry_exit(regs, state);
 }
 #endif
 DO_ERROR_INFO(do_trap_store_fault,
@@ -158,6 +165,8 @@ static inline unsigned long get_break_insn_length(unsigned long pc)
 
 asmlinkage __visible __trap_section void do_trap_break(struct pt_regs *regs)
 {
+	irqentry_state_t state = irqentry_enter(regs);
+
 #ifdef CONFIG_KPROBES
 	if (kprobe_single_step_handler(regs))
 		return;
@@ -185,6 +194,8 @@ asmlinkage __visible __trap_section void do_trap_break(struct pt_regs *regs)
 		regs->epc += get_break_insn_length(regs->epc);
 	else
 		die(regs, "Kernel BUG");
+
+	irqentry_exit(regs, state);
 }
 NOKPROBE_SYMBOL(do_trap_break);
 
