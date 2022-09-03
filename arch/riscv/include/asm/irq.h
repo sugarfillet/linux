@@ -13,5 +13,8 @@
 #include <asm-generic/irq.h>
 
 extern void __init init_IRQ(void);
+asmlinkage void call_on_stack(struct pt_regs *regs, ulong *sp,
+				     void (*fn)(struct pt_regs *), ulong tmp);
+asmlinkage void noinstr do_riscv_irq(struct pt_regs *regs);
 
 #endif /* _ASM_RISCV_IRQ_H */
