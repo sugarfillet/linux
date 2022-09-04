@@ -182,7 +182,9 @@ static void *elf_kexec_load(struct kimage *image, char *kernel_buf,
 	unsigned long new_kernel_pbase = 0UL;
 	unsigned long initrd_pbase = 0UL;
 	unsigned long headers_sz;
+#ifdef CONFIG_ARCH_HAS_KEXEC_PURGATORY
 	unsigned long kernel_start;
+#endif /* CONFIG_ARCH_HAS_KEXEC_PURGATORY */
 	void *fdt, *headers;
 	struct elfhdr ehdr;
 	struct kexec_buf kbuf;
@@ -197,7 +199,9 @@ static void *elf_kexec_load(struct kimage *image, char *kernel_buf,
 			     &old_kernel_pbase, &new_kernel_pbase);
 	if (ret)
 		goto out;
+#ifdef CONFIG_ARCH_HAS_KEXEC_PURGATORY
 	kernel_start = image->start;
+#endif /* CONFIG_ARCH_HAS_KEXEC_PURGATORY */
 	pr_notice("The entry point of kernel at 0x%lx\n", image->start);
 
 	/* Add the kernel binary to the image */
