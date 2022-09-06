@@ -442,6 +442,15 @@ config IRQ_STACKS
 	  Add independent irq & softirq stacks for percpu to prevent kernel stack
 	  overflows. We may save some memory footprint by disabling IRQ_STACKS.
 
+config THREAD_SIZE_ORDER
+	int "Pages of thread stack size (as a power of 2)"
+	range 1 4
+	default "1" if 32BIT
+	default "2" if 64BIT
+	help
+	  Specify the Pages of thread stack size (from 8KB to 64KB), which also
+	  affects irq stack size, which is equal to thread stack size.
+
 endmenu # "Platform type"
 
 menu "Kernel features"
