@@ -8,6 +8,7 @@
 #include <linux/livepatch.h>
 #include <linux/audit.h>
 #include <linux/tick.h>
+#include <linux/stackleak.h>
 
 #include "common.h"
 
@@ -193,6 +194,10 @@ static void exit_to_user_mode_prepare(struct pt_regs *regs)
 	unsigned long ti_work = read_thread_flags();
 
 	lockdep_assert_irqs_disabled();
+
+#ifndef CONFIG_HAVE_ARCH_STACKLEAK
+	stackleak_erase();
+#endif
 
 	/* Flush pending rcuog wakeup before the last need_resched() check */
 	tick_nohz_user_enter_prepare();

@@ -76,8 +76,11 @@ static inline void stackleak_task_init(struct task_struct *t)
 # endif
 }
 
+void noinstr stackleak_erase(void);
+
 #else /* !CONFIG_GCC_PLUGIN_STACKLEAK */
 static inline void stackleak_task_init(struct task_struct *t) { }
+static inline void stackleak_erase(void) {}
 #endif
 
 #endif

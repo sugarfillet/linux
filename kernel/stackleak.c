@@ -17,6 +17,7 @@
 #include <linux/jump_label.h>
 #include <linux/sysctl.h>
 #include <linux/init.h>
+#include <linux/entry-common.h>
 
 static DEFINE_STATIC_KEY_FALSE(stack_erasing_bypass);
 

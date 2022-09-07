@@ -152,7 +152,7 @@ config GCC_PLUGIN_STRUCTLEAK_VERBOSE
 config GCC_PLUGIN_STACKLEAK
 	bool "Poison kernel stack before returning from syscalls"
 	depends on GCC_PLUGINS
-	depends on HAVE_ARCH_STACKLEAK
+	depends on HAVE_ARCH_STACKLEAK || GENERIC_ENTRY
 	help
 	  This option makes the kernel erase the kernel stack before
 	  returning from system calls. This has the effect of leaving
