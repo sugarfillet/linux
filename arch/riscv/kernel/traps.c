@@ -97,7 +97,7 @@ static void do_trap_error(struct pt_regs *regs, int signo, int code,
 #define __trap_section
 #endif
 #define DO_ERROR_INFO(name, signo, code, str)				\
-asmlinkage __visible __trap_section void name(struct pt_regs *regs)	\
+asmlinkage __visible __trap_section void noinstr name(struct pt_regs *regs)	\
 {									\
 	do_trap_error(regs, signo, code, regs->epc, "Oops - " str);	\
 }
@@ -121,7 +121,7 @@ DO_ERROR_INFO(do_trap_store_misaligned,
 int handle_misaligned_load(struct pt_regs *regs);
 int handle_misaligned_store(struct pt_regs *regs);
 
-asmlinkage void __trap_section do_trap_load_misaligned(struct pt_regs *regs)
+asmlinkage __trap_section void noinstr do_trap_load_misaligned(struct pt_regs *regs)
 {
 	if (!handle_misaligned_load(regs))
 		return;
@@ -129,7 +129,7 @@ asmlinkage void __trap_section do_trap_load_misaligned(struct pt_regs *regs)
 		      "Oops - load address misaligned");
 }
 
-asmlinkage void __trap_section do_trap_store_misaligned(struct pt_regs *regs)
+asmlinkage __trap_section void noinstr do_trap_store_misaligned(struct pt_regs *regs)
 {
 	if (!handle_misaligned_store(regs))
 		return;
@@ -156,7 +156,7 @@ static inline unsigned long get_break_insn_length(unsigned long pc)
 	return GET_INSN_LENGTH(insn);
 }
 
-asmlinkage __visible __trap_section void do_trap_break(struct pt_regs *regs)
+asmlinkage __visible __trap_section void noinstr do_trap_break(struct pt_regs *regs)
 {
 #ifdef CONFIG_KPROBES
 	if (kprobe_single_step_handler(regs))
