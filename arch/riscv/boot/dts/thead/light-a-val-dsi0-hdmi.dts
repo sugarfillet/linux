@@ -27,3 +27,22 @@
 		};
 	};
 };
+
+&lightsound {
+	status = "okay";
+
+	simple-audio-card,dai-link@1 {          /* I2S - HDMI */
+		reg = <1>;
+		format = "i2s";
+		cpu {
+			sound-dai = <&light_i2s 1>;
+		};
+		codec {
+			sound-dai = <&dummy_codec 2>;
+		};
+	};
+};
+
+&light_i2s {
+        status = "okay";
+};
