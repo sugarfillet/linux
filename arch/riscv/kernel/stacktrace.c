@@ -120,10 +120,13 @@ noinline void dump_backtrace(struct pt_regs *regs, struct task_struct *task,
 	walk_stackframe(task, regs, print_trace_address, (void *)loglvl);
 }
 
+DEFINE_SPINLOCK(show_stack_spin);
 void show_stack(struct task_struct *task, unsigned long *sp, const char *loglvl)
 {
+	spin_lock(&show_stack_spin);
 	pr_cont("%sCall Trace:\n", loglvl);
 	dump_backtrace(NULL, task, loglvl);
+	spin_unlock(&show_stack_spin);
 }
 
 static bool save_wchan(void *arg, unsigned long pc)
